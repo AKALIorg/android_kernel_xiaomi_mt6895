@@ -49,6 +49,7 @@ mtk-mml-objs += mtk-mml-hdr.o
 mtk-mml-objs += mtk-mml-mutex.o
 mtk-mml-objs += mtk-mml-rdma.o
 mtk-mml-objs += mtk-mml-rsz.o
+mtk-mml-objs += mtk-mml-rsz-fw.o
 mtk-mml-objs += mtk-mml-tcc.o
 mtk-mml-objs += mtk-mml-tdshp.o
 mtk-mml-objs += mtk-mml-wrot.o

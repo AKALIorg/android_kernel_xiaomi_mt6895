@@ -1098,15 +1098,27 @@ static s32 core_config(struct mml_task *task, u32 pipe)
 			ret = task->config->task_ops->dup_task(task, pipe);
 			mml_trace_ex_end();
 			if (ret < 0) {
-				mml_err("dup task fail %d", ret);
-				return ret;
+				/* If no ready packet exists to copy, fallback to initial configuration */
+				task->state = MML_TASK_INITIAL;
+				core_prepare(task, pipe);
+				if (!task->config->tile_output[pipe]) {
+					struct mml_tile_cache *tile_cache =
+						task->config->task_ops->get_tile_cache(task, pipe);
+					ret = calc_tile(task, pipe, tile_cache);
+					if (ret < 0) {
+						mml_err("fallback calc tile fail %d", ret);
+						return ret;
+					}
+				}
 			}
 		}
 
-		/* pkt exists, reuse it directly */
-		mml_trace_ex_begin("%s_%s_%u", __func__, "reuse", pipe);
-		core_reuse(task, pipe);
-		mml_trace_ex_end();
+		if (task->state != MML_TASK_INITIAL) {
+			/* pkt exists, reuse it directly */
+			mml_trace_ex_begin("%s_%s_%u", __func__, "reuse", pipe);
+			core_reuse(task, pipe);
+			mml_trace_ex_end();
+		}
 	}
 
 	return 0;
