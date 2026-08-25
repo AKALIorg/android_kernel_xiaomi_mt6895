@@ -189,6 +189,13 @@ extern void add_timer(struct timer_list *timer);
 extern int try_to_del_timer_sync(struct timer_list *timer);
 extern int del_timer_sync(struct timer_list *timer);
 
+/*
+ * Compat with the upstream timer API rename (timer_delete*), which this
+ * vendor tree's timer core does not implement.
+ */
+#define timer_delete(t)			del_timer(t)
+#define timer_delete_sync(t)		del_timer_sync(t)
+
 #define del_singleshot_timer_sync(t) del_timer_sync(t)
 
 extern void init_timers(void);

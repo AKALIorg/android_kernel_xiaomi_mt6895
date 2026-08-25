@@ -169,4 +169,13 @@ static inline u32 current_sid(void)
 	return tsec->sid;
 }
 
+static inline struct sk_security_struct *selinux_sock(const struct sock *sock)
+{
+	/*
+	 * This tree embeds sk_security directly in struct sock instead of
+	 * using the LSM blob allocator, so no blob offset applies here.
+	 */
+	return (struct sk_security_struct *)sock->sk_security;
+}
+
 #endif /* _SELINUX_OBJSEC_H_ */
