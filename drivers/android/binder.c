@@ -1768,7 +1768,6 @@ static void binder_free_transaction(struct binder_transaction *t)
 {
 	struct binder_thread *target_thread;
 	struct binder_proc *target_proc;
-
 	spin_lock(&t->lock);
 	target_proc = t->to_proc;
 	target_thread = t->to_thread;
