@@ -497,10 +497,30 @@ struct sched_entity {
 	struct sched_avg		avg;
 #endif
 
+#ifdef CONFIG_SCHED_BORE
+	ANDROID_KABI_USE(1, u64 burst_time);
+	_ANDROID_KABI_REPLACE(_ANDROID_KABI_RESERVE(2),
+		struct {
+			u8 prev_burst_penalty;
+			u8 curr_burst_penalty;
+			u8 burst_penalty;
+			u8 burst_score;
+		}
+	);
+	ANDROID_KABI_USE2(3, u8 child_burst, u32 child_burst_cnt);
+	ANDROID_KABI_USE(4, u64 child_burst_last_cached);
+#else // CONFIG_SCHED_BORE
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
+#endif // CONFIG_SCHED_BORE
+
+	/* EEVDF fields — appended at end to preserve KMI */
+	u64				deadline;
+	u64				min_deadline;
+	s64				vlag;
+	u64				slice;
 };
 
 struct sched_rt_entity {
