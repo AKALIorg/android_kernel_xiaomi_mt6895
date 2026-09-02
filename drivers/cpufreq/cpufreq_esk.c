@@ -101,9 +101,9 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * got the SLOWER of the two paths. Deferring to the fast gate is both quicker
  * under the finger and three times cheaper at rest.
  */
-#define RFX_LITTLE_RATE_US		1500
+#define RFX_LITTLE_RATE_US		2000
 #define RFX_LITTLE_UP_US		200
-#define RFX_LITTLE_DOWN_US		3000
+#define RFX_LITTLE_DOWN_US		4000
 
 #define RFX_BIG_RATE_US			1000
 #define RFX_BIG_UP_US			0
@@ -268,15 +268,15 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * the real demand rise and tracks it upward via headroom before the floor
  * matters. The floor's job is only the first ~2ms until demand is visible.
  */
-#define RFX_D_BIG_BURST_FLOOR_PCT	48
-#define RFX_D_PRIME_BURST_FLOOR_PCT	45
+#define RFX_D_BIG_BURST_FLOOR_PCT	45
+#define RFX_D_PRIME_BURST_FLOOR_PCT	42
 
 /*
  * Daily burst detection: 12% delta catches smoother animations (scrolling,
  * sheets) while avoiding false positives from video/background work. Lowered
  * from 15% to improve scroll momentum and keyboard popup detection.
  */
-#define RFX_D_RAMP_DELTA_PCT		8
+#define RFX_D_RAMP_DELTA_PCT		10
 /*
  * Cadence at which the ramp/cold-start reference sample is refreshed. The
  * deltas above are only meaningful against a FIXED time base. They used to be
@@ -310,7 +310,7 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * coverage. Covers spawn + initial layout + first render without prolonged
  * idle-floor hold.
  */
-#define RFX_D_COLDSTART_BOOST_NS	(300 * NSEC_PER_MSEC)
+#define RFX_D_COLDSTART_BOOST_NS	(200 * NSEC_PER_MSEC)
 
 /*
  * Touch window extended to 280ms for keyboard popup and scroll momentum.
