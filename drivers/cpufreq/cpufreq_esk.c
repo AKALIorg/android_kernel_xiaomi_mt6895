@@ -583,6 +583,7 @@ struct esk_policy {
 
 	bool limits_changed;
 	bool need_freq_update;
+	bool pending_clamp;
 
 	bool is_prime;			/* this policy is the Prime cluster */
 	bool is_little;
@@ -1440,14 +1441,32 @@ static bool esk_should_update_freq(struct esk_policy *p, u64 time)
 	if (!cpufreq_this_cpu_can_update(p->policy))
 		return false;
 
+	/*
+	 * Rate-limit the limits_changed bypass. Upstream sugov lets every
+	 * limits_changed eval through unconditionally; with the platform's
+	 * thermal policy rewriting min/max continuously during boot (MI
+	 * thermal_level churn) that becomes an unconditional full frequency
+	 * walk on every scheduler event, with IRQs disabled, from every CPU
+	 * of the policy - a livelock on the fast-switch path. Instead, gate
+	 * the bypass behind a short 1ms window so a clamp change is applied
+	 * within a millisecond while the walk still runs at a bounded rate.
+	 */
 	if (unlikely(READ_ONCE(p->limits_changed))) {
 		WRITE_ONCE(p->limits_changed, false);
+		p->pending_clamp = true;
 		p->need_freq_update = true;
 		smp_mb();
-		return true;
+		delta = (s64)(time - p->last_eval_time);
+		if (delta >= NSEC_PER_MSEC)
+			return true;
+		return false;
 	}
-	if (p->need_freq_update)
-		return true;
+	if (p->need_freq_update) {
+		delta = (s64)(time - p->last_eval_time);
+		if (delta >= NSEC_PER_MSEC)
+			return true;
+		return false;
+	}
 
 	delta = (s64)(time - p->last_eval_time);
 	return delta >= p->freq_update_delay_ns;
@@ -1460,6 +1479,7 @@ static bool esk_commit_freq(struct esk_policy *p, u64 time, unsigned int next_fr
 
 	if (p->need_freq_update) {
 		p->need_freq_update = false;
+	p->pending_clamp = false;
 		if (p->next_freq == next_freq)
 			return false;
 	} else if (p->next_freq == next_freq) {
@@ -1686,6 +1706,28 @@ static void esk_update_shared(struct update_util_data *hook, u64 time,
 	if (esk_should_update_freq(p, time)) {
 		p->last_eval_time = time;
 		/*
+		 * Clamp-only fast path: if this eval is a limits_changed
+		 * re-entry (demand signal unchanged since the last commit),
+		 * re-resolve the committed raw request against the new
+		 * policy->min/max instead of running the full shaping walk.
+		 */
+		if (p->pending_clamp) {
+			unsigned int raw = p->cached_raw_freq ? : p->next_freq;
+			unsigned int clamped = clamp(raw, p->policy->min,
+						     p->policy->max);
+
+			p->need_freq_update = false;
+			p->pending_clamp = false;
+			p->last_eval_time = time;
+			if (clamped == p->next_freq)
+				return;
+			p->next_freq = clamped;
+			if (p->policy->fast_switch_enabled)
+				cpufreq_driver_fast_switch(p->policy, clamped);
+			return;
+		}
+
+		/*
 		 * Cheap early-exit: when the cluster demand is essentially
 		 * unchanged AND no boost/coldstart/UI window is pending, the
 		 * full target walk (EMA + shaping + OPP resolve) can only
@@ -1698,6 +1740,7 @@ static void esk_update_shared(struct update_util_data *hook, u64 time,
 		if (esk_eval_skippable(p, time, gaming))
 			return;
 		next_f = esk_next_freq_shared(esk_c, time, gaming);
+		p->pending_clamp = false;
 		if (esk_commit_freq(p, time, next_f)) {
 			if (p->policy->fast_switch_enabled) {
 				do_fast_switch = true;
@@ -2336,6 +2379,7 @@ static int esk_start(struct cpufreq_policy *policy)
 	p->work_in_progress = false;
 	p->limits_changed = false;
 	p->need_freq_update = false;
+	p->pending_clamp = false;
 	p->prev_upct = 0;
 	p->prev_upct_ns = 0;
 	p->ui_boost_end_ns = 0;
