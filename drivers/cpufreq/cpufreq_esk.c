@@ -1584,6 +1584,87 @@ static unsigned int esk_next_freq_shared(struct esk_cpu *esk_c, u64 time,
 	return esk_target_freq(p, p->filt_util, max_cap, time, gaming);
 }
 
+/* Read-only peek at the sustained-load latch decision (no state change). */
+static inline bool esk_little_should_lift(struct esk_policy *p, u64 time)
+{
+	u32 demand;
+
+	if (!p->is_little || !p->policy->cpuinfo.max_freq)
+		return p->little_cap_lifted;
+	demand = (u32)((u64)p->filt_util * 100 /
+		       arch_scale_cpu_capacity(cpumask_first(p->policy->cpus)));
+	if (demand >= RFX_D_LITTLE_LIFT_PCT)
+		return true;
+	if (demand <= RFX_D_LITTLE_DROP_PCT)
+		return false;
+	return p->little_cap_lifted;
+}
+
+/* Lock-free cluster-max util sample for the skippability probe. */
+static unsigned long esk_get_util_peek(struct esk_policy *p, u64 time,
+				       unsigned long max_cap)
+{
+	unsigned long max_util = 0;
+	unsigned int j;
+
+	for_each_cpu(j, p->policy->cpus) {
+		struct esk_cpu *jc = per_cpu_ptr(&esk_cpu, j);
+		unsigned long util, boost;
+
+		boost = esk_iowait_apply(jc, time, max_cap);
+		esk_get_util(jc, boost);
+		util = max(jc->util, boost);
+		if (util > max_util)
+			max_util = util;
+	}
+	return max_util;
+}
+
+/*
+ * True when re-running the full frequency walk cannot change the committed
+ * OPP: no gaming mode, no pending UI/coldstart/frame-boost window, no
+ * sustained-lock transition in flight, and demand within the dead-band of
+ * the last filtered value. The caller has already passed the eval gate.
+ */
+static bool esk_eval_skippable(struct esk_policy *p, u64 time, bool gaming)
+{
+	unsigned long util_now;
+	unsigned long max_cap;
+	u32 demand;
+
+	if (gaming)
+		return false;
+	if (p->ui_boost_end_ns && time < p->ui_boost_end_ns)
+		return false;
+	if (p->coldstart_boost_end_ns && time < p->coldstart_boost_end_ns)
+		return false;
+	if (esk_frame_boost_active(time))
+		return false;
+	if (p->little_cap_lifted != esk_little_should_lift(p, time))
+		return false;
+
+	max_cap = arch_scale_cpu_capacity(cpumask_first(p->policy->cpus));
+	if (!max_cap)
+		return false;
+	util_now = esk_get_util_peek(p, time, max_cap);
+	if (!util_now)
+		return false;
+
+	demand = (u32)(util_now * 100 / max_cap);
+	if (demand >= RFX_D_LITTLE_LIFT_PCT || demand <= RFX_D_LITTLE_DROP_PCT)
+		return false;
+
+	/* Dead-band: within 2% of the filtered value the walk is a no-op. */
+	if (util_now > p->filt_util) {
+		if (util_now - p->filt_util > max_cap / 50)
+			return false;
+	} else {
+		if (p->filt_util - util_now > max_cap / 50)
+			return false;
+	}
+	return true;
+}
+
 static void esk_update_shared(struct update_util_data *hook, u64 time,
 			      unsigned int flags)
 {
@@ -1604,6 +1685,18 @@ static void esk_update_shared(struct update_util_data *hook, u64 time,
 
 	if (esk_should_update_freq(p, time)) {
 		p->last_eval_time = time;
+		/*
+		 * Cheap early-exit: when the cluster demand is essentially
+		 * unchanged AND no boost/coldstart/UI window is pending, the
+		 * full target walk (EMA + shaping + OPP resolve) can only
+		 * reproduce the committed frequency. Skipping it removes a
+		 * large irqsoff slice from every idle re-evaluation - on the
+		 * fast-switch path this math runs with IRQs disabled inside
+		 * the scheduler hook, which on the Little cluster adds up
+		 * under EEVDF/BORE hooks and shows up as watchdog stalls.
+		 */
+		if (esk_eval_skippable(p, time, gaming))
+			return;
 		next_f = esk_next_freq_shared(esk_c, time, gaming);
 		if (esk_commit_freq(p, time, next_f)) {
 			if (p->policy->fast_switch_enabled) {
