@@ -2137,6 +2137,9 @@ static int esk_kthread_create(struct esk_policy *p)
 	struct sched_param sp = { .sched_priority = MAX_RT_PRIO / 2 };
 	int ret;
 
+	init_irq_work(&p->irq_work, esk_irq_work);
+	mutex_init(&p->work_lock);
+
 	if (policy->fast_switch_enabled)
 		return 0;
 
@@ -2162,8 +2165,6 @@ static int esk_kthread_create(struct esk_policy *p)
 	else
 		kthread_bind_mask(thread, policy->related_cpus);
 
-	init_irq_work(&p->irq_work, esk_irq_work);
-	mutex_init(&p->work_lock);
 	wake_up_process(thread);
 	return 0;
 }
