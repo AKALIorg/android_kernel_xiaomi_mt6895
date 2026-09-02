@@ -101,17 +101,17 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * got the SLOWER of the two paths. Deferring to the fast gate is both quicker
  * under the finger and three times cheaper at rest.
  */
-#define RFX_LITTLE_RATE_US		2000
+#define RFX_LITTLE_RATE_US		1500
 #define RFX_LITTLE_UP_US		200
-#define RFX_LITTLE_DOWN_US		4000
+#define RFX_LITTLE_DOWN_US		3000
 
 #define RFX_BIG_RATE_US			1000
 #define RFX_BIG_UP_US			0
-#define RFX_BIG_DOWN_US			8000
+#define RFX_BIG_DOWN_US			6000
 
 #define RFX_PRIME_RATE_US		1000
 #define RFX_PRIME_UP_US			0
-#define RFX_PRIME_DOWN_US		8000
+#define RFX_PRIME_DOWN_US		6000
 
 /*
  * Evaluation rate while gaming, or while the touch window is open. Frame pacing
@@ -220,8 +220,8 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * 65% still covers compositing and layout; the sustained-load latch lifts to
  * 85% for genuine heavy work, and the interaction cap at 78% handles scrolls.
  */
-#define RFX_D_LITTLE_CAP_PCT		65
-#define RFX_D_LITTLE_BOOST_CAP_PCT	78
+#define RFX_D_LITTLE_CAP_PCT		72
+#define RFX_D_LITTLE_BOOST_CAP_PCT	84
 /*
  * Interaction floor for Little, active only while the touch or UI-burst window
  * is open.
@@ -243,7 +243,7 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * and the rate gate covers the remaining ramp in one evaluation cycle.
  * Strictly window-scoped: no touch, no UI burst, no floor.
  */
-#define RFX_D_LITTLE_UI_FLOOR_PCT	35
+#define RFX_D_LITTLE_UI_FLOOR_PCT	40
 /*
  * Sustained-load cap for Little. Lowered from 85% to 80%: the knee of
  * the V/f curve on most Little clusters sits around 75-80%, so 80% keeps
@@ -257,8 +257,8 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * Sustained load latch thresholds unchanged - the sustained cap lift is about
  * long background work (media scans, syncs), not burst responsiveness.
  */
-#define RFX_D_LITTLE_LIFT_PCT		72	/* latch on: sustained heavy load */
-#define RFX_D_LITTLE_DROP_PCT		35	/* latch off: back to housekeeping */
+#define RFX_D_LITTLE_LIFT_PCT		68	/* latch on: sustained heavy load */
+#define RFX_D_LITTLE_DROP_PCT		30	/* latch off: back to housekeeping */
 /*
  * Burst floors reduced from 52%/48% to 45%/42% for better battery life.
  * Cold-start detection now uses a more accurate raw-demand threshold (40%
@@ -268,15 +268,15 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * the real demand rise and tracks it upward via headroom before the floor
  * matters. The floor's job is only the first ~2ms until demand is visible.
  */
-#define RFX_D_BIG_BURST_FLOOR_PCT	45
-#define RFX_D_PRIME_BURST_FLOOR_PCT	42
+#define RFX_D_BIG_BURST_FLOOR_PCT	48
+#define RFX_D_PRIME_BURST_FLOOR_PCT	45
 
 /*
  * Daily burst detection: 12% delta catches smoother animations (scrolling,
  * sheets) while avoiding false positives from video/background work. Lowered
  * from 15% to improve scroll momentum and keyboard popup detection.
  */
-#define RFX_D_RAMP_DELTA_PCT		12
+#define RFX_D_RAMP_DELTA_PCT		8
 /*
  * Cadence at which the ramp/cold-start reference sample is refreshed. The
  * deltas above are only meaningful against a FIXED time base. They used to be
@@ -304,13 +304,13 @@ extern bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bwmin);
  * momentum scrolling continues after finger lift. 280ms covers animation plus
  * tail without mid-scroll frequency drops that cause jitter.
  */
-#define RFX_D_UI_BOOST_NS		(280 * NSEC_PER_MSEC)
+#define RFX_D_UI_BOOST_NS		(400 * NSEC_PER_MSEC)
 /*
  * Cold start boost extended slightly from 180ms to 200ms for better app launch
  * coverage. Covers spawn + initial layout + first render without prolonged
  * idle-floor hold.
  */
-#define RFX_D_COLDSTART_BOOST_NS	(200 * NSEC_PER_MSEC)
+#define RFX_D_COLDSTART_BOOST_NS	(300 * NSEC_PER_MSEC)
 
 /*
  * Touch window extended to 280ms for keyboard popup and scroll momentum.
