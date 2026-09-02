@@ -181,8 +181,12 @@ struct bbr_context {
 
 /* Window length of min_rtt filter (in sec): */
 static const u32 bbr_min_rtt_win_sec = 10;
+/* 10s (upstream default) gives the filter enough time to see a true min_rtt
+ * sample on jittery cellular paths (4G/5G RTT jitter). 7s expired too quickly
+ * on cellular, triggering unnecessary PROBE_RTT entries that spiked latency.
+ */
 /* Minimum time (in ms) spent at bbr_cwnd_min_target in BBR_PROBE_RTT mode: */
-static const u32 bbr_probe_rtt_mode_ms = 200;
+static const u32 bbr_probe_rtt_mode_ms = 140;
 /* Window length of probe_rtt_min_us filter (in ms), and consequently the
  * typical interval between PROBE_RTT mode entries. The default is 5000ms.
  * Note that bbr_probe_rtt_win_ms must be <= bbr_min_rtt_win_sec * MSEC_PER_SEC
@@ -204,7 +208,7 @@ static const u32 bbr_tso_rtt_shift = 9;
  * lower than the estimated bandwidth. This is an important aspect of the
  * design.
  */
-static const int bbr_pacing_margin_percent = 1;
+static const int bbr_pacing_margin_percent = 2;
 
 /* We use a startup_pacing_gain of 4*ln(2) because it's the smallest value
  * that will allow a smoothly increasing pacing rate that will double each RTT
@@ -338,7 +342,7 @@ static const u32 bbr_bw_probe_rand_rounds = 2;
  * We aim to be fair with Reno/CUBIC up to an inter-loss time epoch of at least:
  *  BDP*RTT = 25Mbps * .030sec /(1514bytes) * 0.030sec = 1.9 secs
  */
-static const u32 bbr_bw_probe_base_us = 2 * USEC_PER_SEC;  /* 2 secs */
+static const u32 bbr_bw_probe_base_us = 1900 * USEC_PER_MSEC;  /* 1.9 secs */
 
 /* Use BBR-native probes spread over this many usec: */
 static const u32 bbr_bw_probe_rand_us = 1 * USEC_PER_SEC;  /* 1 secs */
