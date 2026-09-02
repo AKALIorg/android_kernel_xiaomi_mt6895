@@ -112,6 +112,17 @@ config CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
 	  have a look at the help section of that governor. The fallback
 	  governor will be 'performance'.
 
+config CPU_FREQ_DEFAULT_GOV_ESK
+	bool "esk"
+	depends on SMP
+	select CPU_FREQ_GOV_ESK
+	select CPU_FREQ_GOV_PERFORMANCE
+	help
+	  Use the 'esk' CPUFreq governor by default. ESK is a schedutil
+	  derived governor with dual operating profiles (gaming/daily),
+	  per-cluster tuning, touch boost and thermal safety nets.
+	  The fallback governor will be 'performance'.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -192,6 +203,18 @@ config CPU_FREQ_GOV_CONSERVATIVE
 	  For details, take a look at linux/Documentation/cpu-freq.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_ESK
+	bool "'esk' cpufreq policy governor"
+	depends on CPU_FREQ && SMP
+	select CPU_FREQ_GOV_ATTR_SET
+	select IRQ_WORK
+	help
+	  ESK governor - schedutil derived dual-profile governor
+	  (gaming/daily) with tri-cluster topology awareness,
+	  directional EMA util smoothing, touch input boost,
+	  frame-risk detection and thermal emergency handling.
+	  Based on the Vorpal governor by Templar Dev (Steambot12).
 
 config CPU_FREQ_GOV_SCHEDUTIL
 	bool "'schedutil' cpufreq policy governor"

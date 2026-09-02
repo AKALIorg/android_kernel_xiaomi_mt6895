@@ -1008,4 +1008,45 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 }
 #endif
 
+
+/****** ESK CPUFreq Governor - GKI 5.10 helpers ******
+ * Based on Templar-Kernel-GKI-5.10 Vorpal helpers (Steambot12),
+ * renamed for ESK-Reborn. Full util aggregation: uclamp, RT, DL, IRQ.
+ */
+
+/**
+ * esk_get_util_gki510 - GKI 5.10 compatible util getter for the ESK governor.
+ */
+void esk_get_util_gki510(int cpu, unsigned long boost,
+			 unsigned long *out_util, unsigned long *out_bw_min)
+{
+	struct rq *rq = cpu_rq(cpu);
+	unsigned long util, max_cap;
+
+	max_cap = (unsigned long)arch_scale_cpu_capacity(cpu);
+
+	*out_bw_min = cpu_bw_dl(rq);
+
+	util = schedutil_cpu_util(cpu, cpu_util_cfs(rq), max_cap,
+				  FREQUENCY_UTIL, NULL);
+
+	if (boost > util)
+		util = boost;
+
+	/* 25% DVFS headroom - equivalent to map_util_perf() in newer kernels */
+	util = util + (util >> 2);
+
+	*out_util = min(util, max_cap);
+}
+EXPORT_SYMBOL_GPL(esk_get_util_gki510);
+
+/**
+ * esk_dl_bw_exceeded_gki510 - DL bandwidth check for the ESK governor.
+ */
+bool esk_dl_bw_exceeded_gki510(int cpu, unsigned long bw_min)
+{
+	return cpu_bw_dl(cpu_rq(cpu)) > bw_min;
+}
+EXPORT_SYMBOL_GPL(esk_dl_bw_exceeded_gki510);
+
 cpufreq_governor_init(schedutil_gov);
