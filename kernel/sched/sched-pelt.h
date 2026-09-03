@@ -42,5 +42,17 @@ extern const u32 *pelt_runnable_avg_yN_inv;
 extern int pelt_load_avg_period;
 extern int pelt_load_avg_max;
 
+#define PELT_MAX_PERIOD 32
+#if IS_ENABLED(CONFIG_PELT_UTIL_HALFLIFE_16)
+#define LOAD_AVG_PERIOD 16
+#define LOAD_AVG_MAX 24130
+#elif IS_ENABLED(CONFIG_PELT_UTIL_HALFLIFE_12)
+#define LOAD_AVG_PERIOD 12
+#define LOAD_AVG_MAX 18227
+#elif IS_ENABLED(CONFIG_PELT_UTIL_HALFLIFE_8)
+#define LOAD_AVG_PERIOD 8
+#define LOAD_AVG_MAX 12326
+#else
 #define LOAD_AVG_PERIOD pelt_load_avg_period
 #define LOAD_AVG_MAX pelt_load_avg_max
+#endif
