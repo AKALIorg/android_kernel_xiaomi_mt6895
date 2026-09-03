@@ -1719,11 +1719,15 @@ static void esk_update_shared(struct update_util_data *hook, u64 time,
 			p->need_freq_update = false;
 			p->pending_clamp = false;
 			p->last_eval_time = time;
-			if (clamped == p->next_freq)
-				return;
-			p->next_freq = clamped;
-			if (p->policy->fast_switch_enabled)
-				cpufreq_driver_fast_switch(p->policy, clamped);
+			if (clamped != p->next_freq) {
+				p->next_freq = clamped;
+				if (p->policy->fast_switch_enabled)
+					do_fast_switch = true;
+			}
+			raw_spin_unlock_irqrestore(&p->update_lock, irqflags);
+			if (do_fast_switch)
+				cpufreq_driver_fast_switch(p->policy,
+							   p->next_freq);
 			return;
 		}
 
@@ -1737,8 +1741,10 @@ static void esk_update_shared(struct update_util_data *hook, u64 time,
 		 * the scheduler hook, which on the Little cluster adds up
 		 * under EEVDF/BORE hooks and shows up as watchdog stalls.
 		 */
-		if (esk_eval_skippable(p, time, gaming))
+		if (esk_eval_skippable(p, time, gaming)) {
+			raw_spin_unlock_irqrestore(&p->update_lock, irqflags);
 			return;
+		}
 		next_f = esk_next_freq_shared(esk_c, time, gaming);
 		p->pending_clamp = false;
 		if (esk_commit_freq(p, time, next_f)) {
