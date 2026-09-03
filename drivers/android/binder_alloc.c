@@ -231,8 +231,22 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 	/*
 	 * Protected with mmap_sem in write mode as multiple tasks
 	 * might race to install the same page.
+	 *
+	 * Use the killable variant: when the target process is being
+	 * cgroup-frozen (AMS freezes background apps), a task of that
+	 * process can be parked in the page-fault path holding mmap_sem
+	 * for read and never release it until thaw. An uninterruptible
+	 * down_write here then blocks every binder transaction into that
+	 * process for the whole freeze window (~10-20s), stalling
+	 * system_server threads system-wide. The killable lock lets the
+	 * wait abort on the freeze/fake signal, returning -EINTR so the
+	 * transaction unwinds normally.
 	 */
-	mmap_write_lock(alloc->vma_vm_mm);
+	ret = mmap_write_lock_killable(alloc->vma_vm_mm);
+	if (ret) {
+		mmput_async(alloc->vma_vm_mm);
+		return ret;
+	}
 	if (binder_get_installed_page(lru_page))
 		goto out;
 
