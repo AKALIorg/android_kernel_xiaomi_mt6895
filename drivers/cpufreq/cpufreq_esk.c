@@ -553,6 +553,13 @@ struct esk_tunables {
 	unsigned int up_rate_limit_us;
 	unsigned int down_rate_limit_us;
 	unsigned int gaming_mode;
+	/*
+	 * Prime-selective gaming boost: during gaming_mode, the prime
+	 * policy holds this floor while the big tier releases on idle.
+	 * Percent of the effective ceiling; 0 disables the custom floor
+	 * and falls back to RFX_G_PRIME_FLOOR_PCT.
+	 */
+	unsigned int prime_gaming_floor_pct;
 };
 
 struct esk_policy {
@@ -644,16 +651,14 @@ static inline struct gov_attr_set *esk_to_gov_attr_set(struct kobject *kobj)
 /*
  * Cluster identification.
  *
- * Compared against arch_scale_cpu_capacity(), which normalises the BIGGEST CPU
- * in the system to 1024. So on a two-cluster SoC (MediaTek 2+6 / 4+4) the big
- * cluster is 1024 and classifies as "prime" - it is the fastest tier present,
- * which is what these bands and the sysfs layout below actually mean. Do not
- * "fix" this by requiring a third distinct tier: esk_prime_ktype is the only
- * attribute set carrying gaming_mode, thermal_zone, temp_mc and the frame
- * nodes, so a policy set with no prime member has no gaming_mode node at all
- * and the mode becomes unreachable on every two-cluster device. The prime and
- * big rate limits are identical anyway (1000/0/8000); the only band difference
- * is 2 points of floor.
+ * MT6895 (and similar SoCs) expose THREE cpufreq policies: little (cap ~380),
+ * big (cap 1024) and a separate Prime DVFS domain (cap 1024, its own
+ * performance-domain in the DTS). Capacity alone cannot tell big from prime,
+ * so the prime tier is keyed off policy identity: a policy whose
+ * related_cpus contains the highest-numbered CPU in the system is the prime
+ * policy. On two-tier SoCs (no separate prime domain) the top policy still
+ * classifies as prime and the big tier is simply unused, preserving the
+ * two-cluster behavior.
  */
 static inline bool esk_cap_is_little(unsigned long cap)
 {
@@ -663,6 +668,12 @@ static inline bool esk_cap_is_little(unsigned long cap)
 static inline bool esk_cap_is_prime(unsigned long cap)
 {
 	return cap >= (unsigned long)RFX_PRIME_CAP_THRESHOLD;
+}
+
+/* True when this policy owns the topmost CPU (the prime DVFS domain). */
+static inline bool esk_policy_is_prime(const struct cpufreq_policy *policy)
+{
+	return cpumask_test_cpu(nr_cpu_ids - 1, policy->related_cpus);
 }
 
 /* fmax * pct / 100 */
@@ -1011,7 +1022,7 @@ static unsigned int esk_target_freq(struct esk_policy *p, unsigned long util,
 	unsigned int fmax = pol->cpuinfo.max_freq;
 	unsigned int fmin = pol->cpuinfo.min_freq;
 	bool little = esk_cap_is_little(max_cap);
-	bool prime = esk_cap_is_prime(max_cap);
+	bool prime = p->is_prime;
 	unsigned int freq;
 	unsigned long raw_util = util;	/* demand before headroom inflation */
 	/*
@@ -1079,7 +1090,11 @@ static unsigned int esk_target_freq(struct esk_policy *p, unsigned long util,
 		 * in the others.
 		 */
 		if (prime) {
-			fl = esk_pct(fceil, RFX_G_PRIME_FLOOR_PCT);
+			unsigned int pf = p->tunables->prime_gaming_floor_pct;
+
+			if (pf > 100)
+				pf = 100;
+			fl = esk_pct(fceil, pf);
 			boost_fl = esk_pct(fceil, RFX_G_PRIME_FRAME_PCT);
 		} else if (!little) {		/* Big: carries most load */
 			fl = esk_pct(fceil, RFX_G_BIG_FLOOR_PCT);
@@ -1132,7 +1147,9 @@ static unsigned int esk_target_freq(struct esk_policy *p, unsigned long util,
 		 * Frame-boost ramp lifts the floor proportionally when a
 		 * frame-risk event fired on any cluster.
 		 */
-		if (demand_pct < RFX_G_FLOOR_GATE_PCT && !warmup_active)
+		if (demand_pct < (prime ? RFX_G_FLOOR_GATE_PCT :
+					  RFX_G_FLOOR_GATE_PCT + 15) &&
+		    !warmup_active)
 			fl = esk_pct(fceil, RFX_G_IDLE_FLOOR_PCT);
 		else if (fboost_ramp_pct > 0 &&
 			 demand_pct >= RFX_G_BOOST_FOLLOW_PCT)
@@ -2062,6 +2079,30 @@ static ssize_t gaming_mode_store(struct gov_attr_set *attr_set,
 }
 static struct governor_attr gaming_mode = __ATTR_RW(gaming_mode);
 
+static ssize_t prime_gaming_floor_pct_show(struct gov_attr_set *attr_set,
+					   char *buf)
+{
+	struct esk_tunables *tunables = to_esk_tunables(attr_set);
+
+	return sprintf(buf, "%u\n", tunables->prime_gaming_floor_pct);
+}
+
+static ssize_t prime_gaming_floor_pct_store(struct gov_attr_set *attr_set,
+					    const char *buf, size_t count)
+{
+	struct esk_tunables *tunables = to_esk_tunables(attr_set);
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val))
+		return -EINVAL;
+	if (val > 100)
+		return -EINVAL;
+	tunables->prime_gaming_floor_pct = val;
+	return count;
+}
+static struct governor_attr prime_gaming_floor_pct =
+	__ATTR_RW(prime_gaming_floor_pct);
+
 static ssize_t temp_mc_show(struct gov_attr_set *attr_set, char *buf)
 {
 	return sprintf(buf, "%d\n", atomic_read(&esk_temp_mc));
@@ -2128,6 +2169,7 @@ static struct attribute *esk_prime_attrs[] = {
 	&up_rate_limit_us.attr,
 	&down_rate_limit_us.attr,
 	&gaming_mode.attr,
+	&prime_gaming_floor_pct.attr,
 	&temp_mc.attr,
 	&thermal_zone.attr,
 	NULL
@@ -2274,7 +2316,8 @@ static int esk_init(struct cpufreq_policy *policy)
 		goto free_p;
 
 	max_cap = arch_scale_cpu_capacity(cpumask_first(policy->cpus));
-	p->is_prime = esk_cap_is_prime(max_cap);
+	p->is_prime = esk_cap_is_prime(max_cap) &&
+		      esk_policy_is_prime(policy);
 	p->is_little = esk_cap_is_little(max_cap);
 
 	mutex_lock(&esk_global_tunables_lock);
@@ -2305,6 +2348,7 @@ static int esk_init(struct cpufreq_policy *policy)
 		t->rate_limit_us = RFX_PRIME_RATE_US;
 		t->up_rate_limit_us = RFX_PRIME_UP_US;
 		t->down_rate_limit_us = RFX_PRIME_DOWN_US;
+		t->prime_gaming_floor_pct = RFX_G_PRIME_FLOOR_PCT;
 		ktype = &esk_prime_ktype;
 	} else {
 		t->rate_limit_us = RFX_BIG_RATE_US;
