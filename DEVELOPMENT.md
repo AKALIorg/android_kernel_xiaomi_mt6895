@@ -334,3 +334,114 @@ Commit message format (Android Common Kernel rules):
    (builds/tests locally, provides logs); explain root causes with evidence from THEIR
    logs; never push unverified fixes; always compile-test with their clang before push;
    always verify pushes AND uploaded zips.
+
+---
+
+## 9. DOCUMENTATION MAINTENANCE RULE (MANDATORY)
+
+> **EVERY functional change to this kernel (new feature, fix, revert, config change,
+> stable rebase, governor tuning) MUST be followed by an update to THIS file
+> (`DEVELOPMENT.md`)** — appended to §10 (Full Change History) and, where relevant,
+> to §2 (feature inventory), §3 (governor state), §5 (device facts) or §7 (upstream).
+> The release-notes body in the releases repo must also be updated. This document is
+> the single source of truth for session handoff; if it drifts from the tree, the next
+> session starts from wrong assumptions. Same rule applies to the releases-repo
+> `README.md`/`INSTALL.md` when user-facing behavior changes.
+
+---
+
+## 10. FULL CHANGE HISTORY (chronological, complete)
+
+### Pre-ESK era (base tree)
+- `0af7cf4f` / `6ca89a93` / `0223d21b` — MT6895 DTSI imports (xaga + plato), DTBO build support, `fenrir=true`
+- `dd3b1030` — **Update to Linux 5.10.266** (= 0.2 release base)
+
+### 0.2 → 0.3 development (current line, all on 16.2-rebase)
+| Commit | Change |
+|---|---|
+| `f8e3dbe2` | imgsensor frame_sync_console: removed dead 4KB str_bufs — fixed the only build warning (stack frame 4144 > 4096 in `fsync_console_store`) |
+| `221f9dae` | Merge v5.10.267 (58 commits; binder pin dedup, isotp rewrite, xfrm sk_dst_reset; huge_memory flags fix folded in) |
+| `df46125d` | Merge v5.10.268 (inet frags: skb_gso_reset before reassembly) |
+| `03e2cd2b` | huge_memory: `unsigned long flags = 0` in split_huge_page_to_list (vendor path uses local_irq_disable, not lru_lock) |
+| `3680ab2b` | **NoMount VFS redirection integrated** (`fs/nomount/`, CONFIG_NOMOUNT=y; source maxsteeel/nomount dev branch, keyring API) + vendor fragment: NETFILTER_ADVANCED, IP_SET family, XT_TARGET_REJECT/LOG, MATCH_RECENT/COMMENT/HL/PKTTYPE/OWNER, TMPFS_POSIX_ACL, WQ_POWER_EFFICIENT_DEFAULT |
+| `2256037a` | **EEVDF (6.6 backport) + BORE hybrid** — BORE base → EEVDF → BORE 6.6.3 tuning (Templar commits; features PLACE_LAG/PLACE_DEADLINE_INITIAL; avg_vruntime; SCHED_BORE sysctls incl. sched_burst_fork_atavistic default 0) |
+| `7760bd3f` | **BBRplus** — tcp_bbrplus.c (UJX6N 5.10 port + Templar 3a4802809c stability/perf tuning) + `bbrplus_tso_segs()` shim for 5.10 tso_segs(sk,mss) API |
+| `3092c431` | **le9uo** working-set protection (sysctls vm.anon_min_ratio / vm.clean_low_ratio / vm.clean_min_ratio; mm/Kconfig ANON_MIN_RATIO etc.) |
+| `db442051` | **ESK governor** (Vorpal v2.1 renamed): dual-profile gaming/daily, tri-cluster bands, EMA smoothing, frame-risk detection, touch boost, thermal emergency net; helpers in cpufreq_schedutil.c (esk_get_util_gki510 via schedutil_cpu_util = uclamp/RT/DL/IRQ aware); CONFIG_CPU_FREQ_GOV_ESK + DEFAULT |
+| `7f86a52f` | CONFIG_BRIDGE_NETFILTER=y |
+| `9a8402c7` | ESK v2 daily retune (little cap 72/84, UI floor 40, burst floors 48/45, ramp delta 8, UI window 400ms, coldstart 300ms, rate gates) — later softened in a0810861 (coldstart 200, floors 45/42, delta 10, little rate 2000) |
+| `b55531ca` | **5.10.269 stable merge** (clean; USB UAF fixes, ext4 fast-commit, kcov preempt rework, IPVS/xfrm hardening) |
+| `fe6ff006` | ZRAM_WRITEBACK=y (later reverted) + WQ_POWER restructure |
+| `5a64ca47` | **ZRAM_WRITEBACK removed** (UFS health), **CONFIG_KSM=y** (off at boot, /sys/kernel/mm/ksm/run) |
+| `eacd4cc4` | LOCALVERSION → `-ESK-Reborn_V0.3` |
+| `a0810861` | **Default governor → schedutil** (freeze reports; ESK opt-in); ESK boot-storm knobs softened |
+| `ecfce530` | ESK skippability probe (idle re-eval skip) — **introduced skip-path lock bug (fixed in b1d029ca)** |
+| `1bf9ef41` | BBRv3 mobile tuning: pacing margin 2%, PROBE_RTT 140ms, probe base 1.9s; min_rtt 10s kept (Templar cellular fix) |
+| `87c22842` | **PELT half-life 16ms** (runtime-switchable pelt.c + tables; Kconfig choice) + RCU_BOOST/delay 15 + IDLE_PAGE_TRACKING |
+| `91d0b1ff` | ESK irq_work/work_lock unconditional init |
+| `47b9606d` | limits_changed 1ms gate + clamp fast path (**introduced clamp-path lock bug, fixed in b1d029ca**) |
+| `b1d029ca` | **CRITICAL: two early-returns inside update_lock fixed** (clamp + skippable paths) — the AP_WDT boot-unlock/warm-switch crash root cause |
+| `db15178e` | PELT LOAD_AVG_PERIOD/MAX compile-time constants (fixed half-life); LOAD_AVG_MAX scope Werror fix |
+| `527111b4` | **binder freeze wedge fix**: binder_install_single_page → mmap_write_lock_killable (frozen app holding mmap_sem read blocked all binder txns 10-20s → game freezes, app kills) |
+| `25176a53` | **le9uo ratios 0/0/0** (root cause of game-specific freezes: clean_min 25% floor → reclaim zero-progress livelock under gaming+charging pressure; sysctls runtime-tunable) |
+| `90bac8e9` | **EEVDF-functional sched_yield** (skip-buddy removed; deadline refresh for entitled entities) + **BORE reweight_task_by_prio deadline refresh** (fwd decls sched_slice/calc_delta_fair) |
+| `25462d21` | **ESK three-tier classification** (prime = topmost-CPU policy) + **prime_gaming_floor_pct sysfs** (default 70) + big-tier gaming release at demand<40% |
+| `5e085648` | DEVELOPMENT.md (this file) |
+
+### Release history
+| Release | Tag | Build commit | Notes |
+|---|---|---|---|
+| 0.1 | 0.1 | 5.10.266 (dd3b1030/f8e3dbe2 era) | First public; VNL/KSU-SUSFS/KSU-SUSFS-LXC |
+| 0.2 | 0.2 | 5.10.268 (03e2cd2b) | 5.10.267/268 merges, huge_memory fix |
+| 0.3 Beta 1 | 0.3 (renamed) | 5.10.268→269 era | **WITHDRAWN** — freezes (ESK deadlocks, later binder+le9uo) |
+| **0.3 Beta 2 (current)** | 0.3 | `25176a53e9b8` | All crash fixes; schedutil default; ESK opt-in; prerelease |
+| 0.3.1/0.4 (planned) | — | — | Vorpal v2.2 port + ESK default + fps/battery tuning |
+
+---
+
+## 11. UPSTREAM LINKS (complete reference list)
+
+### Kernel sources
+- Kernel source repo: https://github.com/AKALIorg/android_kernel_xiaomi_mt6895 (branch 16.2-rebase)
+- Releases repo: https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases (branch main)
+- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.269 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
+- AOSP common: https://android.googlesource.com/kernel/common (branch android12-5.10 / android12-5.10-lts)
+- Builder reference (closed, on user PC): `~/esk_builder/` (see §1.1)
+
+### Feature sources (all vetted this project)
+- Templar kernel (primary feature donor — scheduler/governor/net/mm): https://github.com/Steambot12/Templar-Kernel-GKI-5.10
+  - Branches: `Templar-LinuxStable` (main), `Linux1/2/3-Staging` (Vorpal v2.2 lives here), `GoogleLTS-Staging`, `Templar-MGLRU` (future work), `Templar-NoBore`, `Templar-OSS`, `Templar-RC`, `LinuxStable-Pure`, `Linux-RC`
+  - Key commits: EEVDF `8c0ad4c4`, BORE `3e7145c6`/`bb8bac7d`/`e37771cf`/`f65f0962`, Vorpal v2.1 `d89c1ed206` / v1.0 `2942ce8e12`, BBRplus `5f811acb4b`→`3a4802809c`, le9uo `c0762abeb0`+`6476d4d5c8`, NoMount v1.1.1 `3be84ff962`, Droidspaces IPC `ba729331bf`, BBRv3 tune `77964c8e3c` + min_rtt revert `f94513b439`, adios `2b0f833dd7`, ntsync `096c2a4d4e`
+- Templar governor/config extras: https://github.com/Steambot12/Governor-Config (cpufreq_vorpal.c v2.0, cpufreq_reflex.c v7.7-BORE-UNIVERSAL-GAMING, cpufreq_schedutil.c, fair.c, prefer_silver.c, drm_vblank.c, LOG, GKI defconfig)
+- NoMount: https://github.com/maxsteeel/nomount (we use dev-branch keyring version; kernel/README.md has integration methods; metamodule expects keyring API)
+- Droidspaces: https://github.com/ravindu644/Droidspaces-OSS (Kernel-Configuration.md = GKI config guide; SUSFS "hide sus mounts for all processes" must be OFF for Droidspaces)
+- BBRplus 5.10: https://github.com/UJX6N/bbrplus-5.10 (convert_official_linux-5.10.x_src_to_bbrplus.patch)
+- google/bbr: https://github.com/google/bbr (v3 branch; in-tree bbr is already v3)
+- SuSFS: https://gitlab.com/simonpunk/susfs4ksu (branch gki-android12-5.10; builder pulls it)
+- ReSukiSU: https://github.com/ReSukiSU/ReSukiSU (builder installs on KSU variants)
+- KernelSU (base): https://github.com/tiann/KernelSU
+- AIK/AnyKernel3: https://github.com/osm0sis/AnyKernel3 (builder's AK3 template)
+- Linux upstream EAS/EEVDF reference: EEVDF merged in v6.6 (`5f50b5a2` series by Peter Zijlstra)
+- hakavlad le9 patch (le9uo origin): https://github.com/hakavlad/le9-patch (le9ec_patches/le9ec-5.10.patch)
+- BORE scheduler origin: https://github.com/firelzrd/bore-scheduler (BORE by firelzrd; Templar carries the working 5.10 GKI port; hamadmarri has related scheduler repos)
+
+### Device reference
+- Device: POCO X4 GT (xaga) / RB: Redmi Note 11T Pro (xaga) / Pro+ (xagapro) / K50i (xagain) — models 22041216G/C/UC/I
+- SoC: MT6895Z (Dimensity 8100): 4×A78 2.85GHz + 4×A55 2.0GHz; GPU Mali-G610 MC6 (Valhall, ged/gpufreq/GPUEB stack); UFS (health-poor unit), MT6375 charger IC, goodix/fpc fingerprint
+- DTS: `arch/arm64/boot/dts/vendor/mediatek/mt6895.dts` + `xaga*.dts(i)`; 3 cpufreq performance-domains (0=CPU0-3, 1=CPU4-6, 2=CPU7)
+
+---
+
+## 12. GLOSSARY / PROJECT CONVENTIONS
+
+- **ESK** = the project name (kernel = ESK Reborn). Governor name `esk` (renamed from Vorpal). Symbols `esk_*` (was `rfx_*` — Reflex origin in later Templar versions).
+- **AP_WDT** = MTK Application-Processor hardware watchdog reset (full hang; cmdline `aee_aed.poffreason=AP_WDT`).
+- **AEE** = MTK Android Exception Engine (userspace-facing crash/reboot handler; "main process crashed" reports).
+- **wdtk** = MTK watchdog kicker kthread (logs `[wdtk] kick watchdog` every ~15.5s; its absence in logs = system wedged).
+- **GED / GPUEB** = MTK GPU Enhanced Driver + GPU Embedded-Controller firmware (owns GPU DVFS via IPI; gpufreq_v2.c wrapper).
+- **lmkd/AEE soft reboot** = userspace-triggered reboot after stalls (distinct from AP_WDT).
+- **fast-switch path** = cpufreq policies with `fast_switch_possible=true` (mediatek,cpufreq-hw) where governor commits run inline in the scheduler hook with rq->lock held and IRQs disabled. ALL ESK crashes were inline-path bugs.
+- **Vendor fragment** = `arch/arm64/configs/vendor/xiaomi_mt6895.config` (+ `xaga.config` device file) merged over `gki_defconfig`.
+- **KABI reserves** = `ANDROID_KABI_RESERVE(n)` padding in task_struct; BORE uses 1-4, lxc_support.patch uses 6-8. New task_struct fields MUST use a free reserve or be appended past them.
+- Commit style: `ANDROID:` / `BACKPORT:` prefixes, Change-Id + Signed-off-by (see §4).
+- Push + verify (`git log origin/branch -1`). Upload + verify zip Image version. Update DEVELOPMENT.md every change (§9).
