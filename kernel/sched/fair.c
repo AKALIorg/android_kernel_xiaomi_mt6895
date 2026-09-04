@@ -575,6 +575,9 @@ static inline u32 calc_burst_penalty(u64 burst_time) {
 
 static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 			    unsigned long weight);
+static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se);
+static u64 calc_delta_fair(u64 delta, struct sched_entity *se);
+
 static void reweight_task_by_prio(struct task_struct *p, int prio)
 {
 	struct sched_entity *se = &p->se;
@@ -584,6 +587,20 @@ static void reweight_task_by_prio(struct task_struct *p, int prio)
 
 	reweight_entity(cfs_rq, se, weight);
 	load->inv_weight = sched_prio_to_wmult[prio];
+
+	/*
+	 * EEVDF: the deadline was derived from the OLD slice (old weight).
+	 * After a burst_score-driven reweight the deadline must be refreshed
+	 * against the new slice, otherwise a task that just got promoted
+	 * keeps its demoted deadline (and vice versa) until it next sleeps -
+	 * visible as frame-time variance on render-critical threads.
+	 */
+	if (se->on_rq) {
+		u64 vslice = sched_slice(cfs_rq, se);
+
+		se->slice = vslice;
+		se->deadline = se->vruntime + calc_delta_fair(vslice, se);
+	}
 }
 
 static inline u8 effective_prio(struct task_struct *p) {
@@ -7665,12 +7682,6 @@ static void set_next_buddy(struct sched_entity *se)
 	}
 }
 
-static void set_skip_buddy(struct sched_entity *se)
-{
-	for_each_sched_entity(se)
-		cfs_rq_of(se)->skip = se;
-}
-
 /*
  * Preempt the current task with a newly woken task if needed:
  */
@@ -7990,17 +8001,40 @@ static void yield_task_fair(struct rq *rq)
 	restart_burst(se);
 	if (unlikely(rq->nr_running == 1))
 		return;
-
-	clear_buddies(cfs_rq, se);
 #endif // CONFIG_SCHED_BORE
+
+	/*
+	 * EEVDF-functional yield: pull the caller's request deadline to
+	 * 'now'. This makes curr ineligible until its entitlement catches
+	 * up, so the next pick naturally selects the next-earliest deadline
+	 * - the EEVDF equivalent of "run someone else first". The CFS
+	 * skip-buddy mechanism this replaces has no effect on EEVDF
+	 * picking, which is deadline-driven; games calling sched_yield()
+	 * in their render loops were not actually yielding under the
+	 * hybrid, showing up as frame-time variance.
+	 */
+	if (se->on_rq) {
+		u64 vprot = avg_vruntime(cfs_rq);
+
+		/*
+		 * Only pull the deadline in if the entity is still entitled
+		 * (lag > 0); a negative-lag entity is already ineligible and
+		 * yielding it further would be unfair.
+		 */
+		if ((s64)(se->vruntime - vprot) < 0) {
+			u64 vslice = sched_slice(cfs_rq, se);
+
+			se->slice = vslice;
+			se->deadline = se->vruntime + calc_delta_fair(vslice, se);
+		}
+	}
+
 	/*
 	 * Tell update_rq_clock() that we've just updated,
 	 * so we don't do microscopic update in schedule()
 	 * and double the fastpath cost.
 	 */
 	rq_clock_skip_update(rq);
-
-	set_skip_buddy(se);
 }
 
 static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
