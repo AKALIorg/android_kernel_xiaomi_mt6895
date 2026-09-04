@@ -127,6 +127,7 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `25176a53` | **le9uo ratios DISABLED (0/0/0)** — root cause of game-specific freezes: `clean_min_ratio=25%` (~1GB floor) made `shrink_folio_list()` keep_every_page under gaming memory pressure → direct reclaim zero-progress livelock. Sysctls remain runtime-tunable |
 | `90bac8e9` | **EEVDF-functional sched_yield** (skip-buddy is a no-op under EEVDF; now refreshes slice/deadline for entitled entities) + **BORE reweight deadline refresh** (reweight_task_by_prio now recomputes slice/deadline; needs forward decls of `sched_slice`/`calc_delta_fair`) + removed dead `set_skip_buddy` |
 | `25462d21` | **ESK three-tier classification + Prime-selective gaming boost**: prime = policy owning topmost CPU (`esk_policy_is_prime()`), NOT capacity alone; new sysfs `prime_gaming_floor_pct` (0-100, default 70) on prime tunables; big tier releases to idle floor at demand<40% in gaming (prime holds 25%) |
+| `088c0f238` | **ESK governor upgraded to v2.2** (full port of Vorpal Linux6-Staging end state `f3efbafdbbc2`): see §3 for the feature delta; drops our skippability probe + pending-clamp machinery (bug class); keeps topmost-CPU prime classification + `prime_gaming_floor_pct` (default now 64); new `esk_setattr_sugov_gki510()` schedutil helper |
 
 ### 2.1 Known-in-tree-but-inert features
 - **NoMount**: dentry-op hooks only attach to dentries with registered rules; zero rules
@@ -150,16 +151,19 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 
 ## 3. ESK GOVERNOR — CURRENT STATE & NEXT STEPS
 
-File: `drivers/cpufreq/cpufreq_esk.c` (~2500 lines). Governor name: `esk`.
+File: `drivers/cpufreq/cpufreq_esk.c` (~2270 lines) — **v2.2** as of `088c0f238f1e`
+(see §3.1). Governor name: `esk`. Boot pr_info: `ESK Governor v2.2 by Templar Dev`.
 Structural facts (MUST KNOW):
 - **MT6895 uses `mediatek,cpufreq-hw` → `fast_switch_possible=true`** → ESK kthreads are
   NEVER created (`esk_kthread_create()` early-returns); **all commits run inline in the
   scheduler hook with IRQs disabled** via `cpufreq_driver_fast_switch()` (just a
   `writel_relaxed` to HW). Templar's Poco F5 (Qualcomm) uses the kthread path —
   their governor was never exercised on the inline path. ALL ESK bugs so far were
-  inline-path bugs. **Rule: every early-exit inside `esk_update_shared()` MUST unlock
-  `p->update_lock` (raw_spin_lock_irqsave) before returning.** Audit all 5 lock sites
-  after touching this file.
+  inline-path bugs. v2.2's hook is **single-lock, zero early-returns inside it**
+  (work carried out on flags) — the old §3 "every early-exit MUST unlock" rule is
+  moot by construction, but AUDIT anyway after touching this file: any new early
+  return between `raw_spin_lock_irqsave(&p->update_lock, ...)` and its unlock is a
+  boot-unlock AP_WDT.
 - sysfs: `gaming_mode` (prime policy), `prime_gaming_floor_pct` (NEW), `temp_mc`,
   `thermal_zone`, per-cluster `rate_limit_us`/`up/down_rate_limit_us`.
 - Tier classification (25462d21): little = cap≤614; prime = cap≥1000 AND policy owns
@@ -174,46 +178,48 @@ Structural facts (MUST KNOW):
   https://github.com/Steambot12/Templar-Kernel-GKI-5.10 and
   https://github.com/Steambot12/Governor-Config (their tunables/logs repo).
 
-### 3.1 NEXT MAJOR TASK: Vorpal/ESK v2.2 port (unstarted)
-Templar's **v2.2** exists on branches `Linux1/2/3-Staging`
-(`drivers/cpufreq/cpufreq_vorpal.c`, 2431 lines; commits `848abc923b`, `fa014b42ca`,
-`497845d2b0`, `f88ce2fba3`, `07fa38fc87`, dated Aug 31–Sep 2 2026). 1550-line delta
-from v2.1. Key changes to port (patches in `/tmp/opencode/patches/v22_*.patch` will be
-gone after reboot — re-download from GitHub commit .patch URLs):
-- New constants: `RFX_LITTLE_RATE_US 3000`, `RFX_BIG_RATE_US 3000`, `RFX_BIG_DOWN_US 2500`,
-  `RFX_PRIME_DOWN_US 2500`, `RFX_UI_RATE_US 1500` (was 700)
-- Gaming band rebalance: PRIME floor 70→64, frame 88→92; BIG floor 66→58, frame 86→90;
-  LITTLE floor 55→60, boost 74→80
-- Daily: `RFX_D_LITTLE_BOOST_CAP_PCT 80`, `UI_FLOOR 32`, `DROP_PCT 55`, **NEW Big/Prime
-  daily caps** (`RFX_D_BIG_CAP_PCT 70`, `RFX_D_BIG_BOOST_CAP_PCT 80`, `RFX_D_PRIME_CAP_PCT 68`,
-  `RFX_D_BIG_LIFT_PCT 65`, `RFX_D_BIG_SUSTAINED_CAP_PCT 94`, `RFX_D_PRIME_SUSTAINED_CAP_PCT 85`)
-- `RFX_D_UI_BOOST_NS 280→150ms`, `RFX_INPUT_WINDOW_NS 280→230ms`
-- **EMA rework**: `RFX_EMA_GAMING_DIVISOR 100`, `RFX_EMA_MAX_STEPS 32`, iterative per-step decay
-- **Headroom**: GAMING 12→2, SAT_GAMING 82→98 (near-raw demand in gaming)
-- **NEW warmup logic**: extendable warmup (`RFX_GAMING_WARMUP_MAX_NS 600ms`,
-  EXTEND_PCT 90, RELEASE_PCT 40, `warmup_low_demand_since_ns` state)
-- **NEW thermal_cooling hysteretic band**: `RFX_G_COOL_ENTER_PCT 80 / EXIT_PCT 85`,
-  `RFX_G_COOL_STEADY_FLOOR_PCT 52`, `RFX_G_COOL_BOOST_FLOOR_PCT 72` (floors drop to steady
-  while ceiling is clamped, restore on exit)
-- **NEW floor hysteresis**: `floor_gated` bool + `RFX_G_FLOOR_GATE_EXIT_PCT 35` (exit at 35,
-  enter at 25 — no chatter)
-- **NEW gaming ramp detector**: `RFX_G_RAMP_DELTA_PCT 15`, `RFX_G_RAMP_HOLD_NS 1ms`,
-  `RFX_G_RAMP_SAMPLE_NS 8ms`, `prev_gaming_demand_pct/ns` state
-- **sustained-lock REMOVED** entirely (state fields deleted)
-- **`max_seen` per-policy high-water mark** replaces `qos_pct` in thermal headroom
-  (`rfx_thermal_headroom_pct(p, max_cap, &baseline)` signature change)
-- **`rfx_ntiers()`**: counts distinct capacities; `is_prime = is_top && ntiers>=3`
-  (better than our cpu7-identity heuristic — adopt it)
-- `is_top` bool added (gaming_mode node host); `is_prime` = "prime band applies (3+ tiers)"
-- Frame-boost window 120→25ms, ramp-down 120→60ms with consumed-time accounting
-- FRAME_BOOST_RAMP: consumed_ns bookkeeping (`frame_boost_ramp_last_ns += consumed`)
-- Thermal poll: idle 3000→5000ms, new WARM 2000ms poll at `RFX_TEMP_WARM_MC 70000`
-- RISK_SATURATION 85→90
-Port strategy: hand-port onto our `cpufreq_esk.c` (rename rfx→esk), NOT patch files
-(they won't apply — we renamed + added 3-tier). Take the FINAL v2.2 file
-(`Linux3-Staging` raw URL) and merge per-hunk, keeping our `prime_gaming_floor_pct`
-and our unlock-discipline. Compile-test `cpufreq_esk.o`, then device-test gaming_mode
-before shipping.
+### 3.1 DONE: Vorpal/ESK v2.2 port (was the major task — completed 088c0f238f1e)
+Templar's final state is **Linux6-Staging head** (`f3efbafdbbc2`, Sep 4 2026), NOT
+the Linux3-Staging snapshot this section was originally written from. It folds:
+- **v2.2 upgrade** (`3061f2d`): gaming band (Prime 64/92, Big 58/90, Little
+  45/66), EMA divisor 100 + step cap 32, headroom GAMING 2 / sat-to-max 98,
+  adaptive warmup (300ms base / 600ms max / feeds the frame-boost ramp),
+  hysteretic thermal cool-down (enter 80 / exit 85, steady floor 52, boost
+  floor 72), floor gate deadband (25/35, `floor_gated`), sustained-lock
+  REMOVED, frame-boost window 33ms + ramp 60ms with consumed-time accounting,
+  daily Big/Prime caps (70/68 base, 80 boost, 80/80 sustained)
+- **Linux4 fold** (`3c9d17ed`): is_top/is_prime split, **fceil folds
+  policy->max via `max_seen` high-water** (MTK has no cpufreq_cooling —
+  policy->max IS the throttle channel), sustained latch edges 80/68,
+  cold-start gated on `esk_input_active()`, **gaming_mode user-owned** (PM
+  suspend notifier removed), frame-boost window 33→25ms
+- **Linux5** (`182ff823`): EMA advances its reference by consumed periods
+  (sub-period remainder kept), `esk_elapsed()` clamps rq_clock skew across a
+  shared policy (u64 wrap → ~584y → every window fired instantly)
+- **Linux6** (`f3efbafd`): sustained caps == boost caps (background work no
+  longer outranks interaction); irq_work/work_lock unconditional init (= our
+  `91d0b1ff`, adopted upstream — they cite our fork's crash history)
+
+What we kept from our fork (deliberate divergences):
+- **Prime = policy owning topmost CPU** (`esk_policy_is_prime`). Templar's
+  `ntiers()` counts distinct capacities — on MT6895 Big and Prime both report
+  cap 1024, so their rule would move CPU7 into the BIG band and lose the
+  PRIME band entirely.
+- **`prime_gaming_floor_pct` sysfs** (now on the dynamic prime-cluster attr
+  group alongside gaming_mode; default 64 = new macro value).
+- GKI510 util helpers; new `esk_setattr_sugov_gki510()` in
+  `kernel/sched/cpufreq_schedutil.c` + decl in `include/linux/sched/cpufreq.h`
+  (SUGOV DL class for the DVFS worker; latent on MTK, correct elsewhere).
+
+What we DROPPED from our fork (deliberately):
+- skippability probe (`ecfce530`), limits 1ms gate + `pending_clamp` fast
+  path (`47b9606d`), `b1d029ca`'s early-return unlock discipline (moot: v2.2
+  hook is single-lock, zero returns inside it) — upstream's design is bounded
+  by construction. Our tuning constant tweaks (a0810861-era) replaced by
+  v2.2's measured-stable values.
+
+Sysfs surface unchanged for users: `gaming_mode` + `prime_gaming_floor_pct`
+still on policy7 only; rate limits on all three.
 
 ### 3.2 Known remaining perf items (from user testing + PUBG SF-latency data)
 - PUBG SF captures: avg FPS stable (~89) but 1% low/min FPS and jank vary run-to-run;
@@ -386,7 +392,8 @@ Commit message format (Android Common Kernel rules):
 | `25176a53` | **le9uo ratios 0/0/0** (root cause of game-specific freezes: clean_min 25% floor → reclaim zero-progress livelock under gaming+charging pressure; sysctls runtime-tunable) |
 | `90bac8e9` | **EEVDF-functional sched_yield** (skip-buddy removed; deadline refresh for entitled entities) + **BORE reweight_task_by_prio deadline refresh** (fwd decls sched_slice/calc_delta_fair) |
 | `25462d21` | **ESK three-tier classification** (prime = topmost-CPU policy) + **prime_gaming_floor_pct sysfs** (default 70) + big-tier gaming release at demand<40% |
-| `5e085648` | DEVELOPMENT.md (this file) |
+| `5e085648` / `650390c8` / `189032c2` | DEVELOPMENT.md (this file) |
+| `088c0f23` | **ESK governor → v2.2** — full port of Vorpal Linux6-Staging end state (§3.1 has the complete feature delta + keep/drop decisions). Files: `drivers/cpufreq/cpufreq_esk.c` (wholesale replace + grafts), `kernel/sched/cpufreq_schedutil.c` (+`esk_setattr_sugov_gki510`), `include/linux/sched/cpufreq.h` (+decl). Compile-tested clean. **Needs on-device validation (gaming + daily) before any release** |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -488,6 +495,11 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | Game freezes ~20s, display off, SystemUI crash, app kills, soft reboot (both governors, charging makes worse, heavy Roblox only) | **TWO independent bugs:** (a) le9uo `clean_min_ratio=25%` floor → reclaim zero-progress livelock; (b) binder `mmap_write_lock` uninterruptible while cgroup-frozen app holds mmap_sem read in page fault | `25176a53` + `527111b4` | fixed |
 | UI lags (ESK v1 era) | CFS skip-buddy no-op under EEVDF + stale BORE reweight deadlines + PELT32 latency | `90bac8e9` + `87c22842` | fixed |
 | CPU7 300↔2850MHz oscillation (PUBG capture) | No prime/big tier split; sustained boosts pinned CPU7 | `25462d21` | fixed, needs on-device validation |
+| EMA time constant stretched / latch releases late (upstream Linux5) | EMA discarded sub-period remainders; reference advanced before callee decided | `088c0f23` (v2.2 port) | fixed in tree, needs validation |
+| rq_clock skew fired every timing window instantly (upstream Linux5) | u64 elapsed-time subtraction across sibling CPUs of shared policy wraps | `088c0f23` (`esk_elapsed()` clamp) | fixed in tree, needs validation |
+| fceil blind to vendor thermal HAL on MTK (upstream Linux4) | Only thermal_pressure was read; cpufreq_cooling never registers on MTK | `088c0f23` (`max_seen` + policy->max fold) | fixed in tree, needs validation |
+| Lock-order inversion, deferred commit path (upstream) | work_lock held across cpufreq_driver_target() which takes policy->rwsem held by ->limits() | `088c0f23` (`__cpufreq_driver_target`) | latent on MTK (fast-switch), fixed for other drivers |
+| Thermal poller busy-rearm with no temp source (upstream Linux4) | Poll re-armed forever with neither temp source configured | `088c0f23` | fixed in tree |
 | ZRAM writeback wear (UFS health) | Writeback writes cold pages to flash | `5a64ca47` (removed) | fixed |
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
 
@@ -540,7 +552,10 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 Reported stable in early testing (5h gaming + boot-unlock + charging sessions).
 
 ### Roadmap (priority order)
-1. **Vorpal/ESK v2.2 port** (§3.1) — fps stability + battery (biggest pending item)
+1. **On-device validation of ESK v2.2** (`088c0f23`) — user builds KSU-SUSFS-LXC
+   variant, runs the §6 checklist + gaming session. Verify: `gaming_mode` +
+   `prime_gaming_floor_pct` (default now **64**) on policy7, CPU7 no longer
+   oscillating 300↔2850, freq trace sane under throttle (fceil/max_seen path)
 2. On-device validation of prime-selective boost + EEVDF yield (PUBG SF-capture targets:
    max FT <200ms, Big Jank −50%, run-over-run variance down)
 3. ESK → default governor once user validates multi-day stability (flip
