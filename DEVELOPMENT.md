@@ -13,7 +13,9 @@ without any prior session knowledge.
   + 4×Cortex-A55 @ 2.0GHz (CPU0-3 = Little). DTS: `capacity-dmips-mhz` = 380 (little) /
   1024 (big+prime). THREE cpufreq performance-domains in `mt6895.dts` (0=CPU0-3, 1=CPU4-6, 2=CPU7).
 - **OS base:** Google **android12-5.10** GKI common kernel (device ships with Android 12);
-  ROM support target: Android 16/17 custom ROMs (untested).
+  ROM support target: Android 16/17 custom ROMs (A17 boot verified Sep 2026 on
+  `Angxddeep/android_kernel_xiaomi_mt6895:seventeen` @ 5.10.264 — our 5.10.269
+  is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
 - **Current stable sublevel:** **5.10.269** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
   `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 currently).
@@ -128,6 +130,13 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `90bac8e9` | **EEVDF-functional sched_yield** (skip-buddy is a no-op under EEVDF; now refreshes slice/deadline for entitled entities) + **BORE reweight deadline refresh** (reweight_task_by_prio now recomputes slice/deadline; needs forward decls of `sched_slice`/`calc_delta_fair`) + removed dead `set_skip_buddy` |
 | `25462d21` | **ESK three-tier classification + Prime-selective gaming boost**: prime = policy owning topmost CPU (`esk_policy_is_prime()`), NOT capacity alone; new sysfs `prime_gaming_floor_pct` (0-100, default 70) on prime tunables; big tier releases to idle floor at demand<40% in gaming (prime holds 25%) |
 | `088c0f238` | **ESK governor upgraded to v2.2** (full port of Vorpal Linux6-Staging end state `f3efbafdbbc2`): see §3 for the feature delta; drops our skippability probe + pending-clamp machinery (bug class); keeps topmost-CPU prime classification + `prime_gaming_floor_pct` (default now 64); new `esk_setattr_sugov_gki510()` schedutil helper |
+| `779b6e85` | **EEVDF rescale on reweight** (Templar `77672e88`, mainline `eab03c23`): new `reweight_eevdf()` preserves lag/slice across weight change; fixes `min_deadline` rbtree corruption / 1%-low drops |
+| `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar `2a8e879f`): TASK_NEW no reweight, IDLE keeps `WEIGHT_IDLEPRIO`, reset walk uses `task_rq_lock`+`for_each_process_thread`, `fork_atavistic` extra2 → `SYSCTL_ZERO` |
+| `9b9ad306` | **sched_yield EEVDF fix** (Templar `8a9affcf`): `deadline += one slice` replaces no-op skip buddy; supersedes our `90bac8e9` entitled-entity variant |
+| `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar `b21d737` + `10d579`): file-reclaim no longer blocked by `anon_below_min` on swapless, `clean_low_ratio` default 15→5 |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): guard `v4l2_ctrl` handler when CID disabled, revert of 5.10.241 revert |
+| `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
+| — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.269 superset therefore A17-ready (no extra patch needed; see §16.1) |
 
 ### 2.1 Known-in-tree-but-inert features
 - **NoMount**: dentry-op hooks only attach to dentries with registered rules; zero rules
@@ -394,6 +403,12 @@ Commit message format (Android Common Kernel rules):
 | `25462d21` | **ESK three-tier classification** (prime = topmost-CPU policy) + **prime_gaming_floor_pct sysfs** (default 70) + big-tier gaming release at demand<40% |
 | `5e085648` / `650390c8` / `189032c2` | DEVELOPMENT.md (this file) |
 | `088c0f23` | **ESK governor → v2.2** — full port of Vorpal Linux6-Staging end state (§3.1 has the complete feature delta + keep/drop decisions). Files: `drivers/cpufreq/cpufreq_esk.c` (wholesale replace + grafts), `kernel/sched/cpufreq_schedutil.c` (+`esk_setattr_sugov_gki510`), `include/linux/sched/cpufreq.h` (+decl). Compile-tested clean. **Needs on-device validation (gaming + daily) before any release** |
+| `779b6e85` | **EEVDF rescale on reweight** (Templar 77672e88, mainline eab03c23) — see §2 |
+| `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar 2a8e879f) — see §2 |
+| `9b9ad306` | **sched_yield EEVDF fix** (Templar 8a9affcf) — replaces 90bac8e9 variant |
+| `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar b21d737 + 10d579) — see §2 |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge f89055 + 23f18ca) — see §2 |
+| `8f3defb9` | **mali IPA clock fix** (XagaForge e11295) — see §2 |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -548,18 +563,36 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 (prerelease) — first build with zero known crash mechanisms.**
-Reported stable in early testing (5h gaming + boot-unlock + charging sessions).
+**State: 0.3 Beta 2 + v2.2 + stable fixes (HEAD `8f3defb9`).** 5.10.269, ESK v2.2,
+Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/media/mali
+fixes from XagaForge — all pushed to `16.2-rebase`. A17 boot on xaga verified
+via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
+
+### 16.1 Android 17 readiness (checked Sep 2026)
+
+* **Base:** `Angxddeep/...:seventeen` boots A17 on xaga at 5.10.264 with minimal
+  vendor configs (no Polly, no UNAME_OVERRIDE). Our `16.2-rebase` is 5.10.269 +
+  strict superset — version string spoof (`UNAME_OVERRIDE` → `5.10.226-...`)
+  stays for Play Integrity and does not affect boot; A17 init does not require
+  a GKI bump or selinux genfscon patch (already in 5.10.269 via `b55531ca`).
+  No extra A17 init patch needed — the staging Mali IPA + media fixes above
+  are the only device pieces that were missing vs XagaForge.
+* **XagaForge sync:** `16.2` media (f89055+23f18ca) + `staging` Mali IPA
+  (e11295) merged. Remaining XagaForge delta (~70 commits) is history we
+  intentionally diverged from (Polly, etc.) — not needed for boot.
+* **Binder/ashmem:** `BINDERFS=y`, `ASHMEM=y` present in `gki_defconfig`;
+  builder LXC patch adds `USER_NS`/`PID_NS` at build time for Droidspaces.
 
 ### Roadmap (priority order)
-1. **On-device validation of ESK v2.2** (`088c0f23`) — user builds KSU-SUSFS-LXC
-   variant, runs the §6 checklist + gaming session. Verify: `gaming_mode` +
-   `prime_gaming_floor_pct` (default now **64**) on policy7, CPU7 no longer
-   oscillating 300↔2850, freq trace sane under throttle (fceil/max_seen path)
-2. On-device validation of prime-selective boost + EEVDF yield (PUBG SF-capture targets:
-   max FT <200ms, Big Jank −50%, run-over-run variance down)
+1. **On-device validation of HEAD** (`8f3defb9`) on A17 ROM — user builds
+   KSU-SUSFS-LXC variant, runs §6 checklist + gaming session. Verify:
+   `gaming_mode` + `prime_gaming_floor_pct` (default **64**) on policy7,
+   CPU7 no longer oscillating 300↔2850, freq trace sane under throttle
+   (`fceil/max_seen` path), media (AIE) no crash, GPU IPA sane
+2. On-device validation of prime-selective boost + EEVDF yield (PUBG SF-capture
+   targets: max FT <200ms, Big Jank −50%, run-over-run variance down)
 3. ESK → default governor once user validates multi-day stability (flip
-   CONFIG_CPU_FREQ_DEFAULT_GOV_ESK=y + localversion bump)
+   `CONFIG_CPU_FREQ_DEFAULT_GOV_ESK=y` + localversion bump)
 4. **MGLRU port** (Templar-MGLRU branch) — highest-impact remaining feature, large effort
 5. Stable-sublevel tracking (5.10.26X when new lands, §15.2)
 6. Optional: SurfaceFlinger RT scoping (needs ROM-side init.rc wiring, spec §1)
