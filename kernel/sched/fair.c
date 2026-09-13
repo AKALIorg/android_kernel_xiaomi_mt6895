@@ -8037,9 +8037,11 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev)
 }
 
 /*
- * sched_yield() is very simple
+ * sched_yield()
  *
- * The magic of dealing with the ->skip buddy is in pick_next_entity.
+ * EEVDF: ->skip is dead (pick_eevdf() never reads it), so push the deadline
+ * out by one slice instead. That makes the yielder lose the next pick to
+ * anything runnable, which is what a yield is for.
  */
 static void yield_task_fair(struct rq *rq)
 {
@@ -8068,32 +8070,8 @@ static void yield_task_fair(struct rq *rq)
 		return;
 #endif // CONFIG_SCHED_BORE
 
-	/*
-	 * EEVDF-functional yield: pull the caller's request deadline to
-	 * 'now'. This makes curr ineligible until its entitlement catches
-	 * up, so the next pick naturally selects the next-earliest deadline
-	 * - the EEVDF equivalent of "run someone else first". The CFS
-	 * skip-buddy mechanism this replaces has no effect on EEVDF
-	 * picking, which is deadline-driven; games calling sched_yield()
-	 * in their render loops were not actually yielding under the
-	 * hybrid, showing up as frame-time variance.
-	 */
-	if (se->on_rq) {
-		u64 vprot = avg_vruntime(cfs_rq);
-
-		/*
-		 * Only pull the deadline in if the entity is still entitled
-		 * (lag > 0); a negative-lag entity is already ineligible and
-		 * yielding it further would be unfair.
-		 */
-		if ((s64)(se->vruntime - vprot) < 0) {
-			u64 vslice = sched_slice(cfs_rq, se);
-
-			se->slice = vslice;
-			se->deadline = se->vruntime + calc_delta_fair(vslice, se);
-		}
-	}
-
+	/* Yield the remainder of this slice: defer our deadline by one. */
+	se->deadline += calc_delta_fair(se->slice, se);
 	/*
 	 * Tell update_rq_clock() that we've just updated,
 	 * so we don't do microscopic update in schedule()
