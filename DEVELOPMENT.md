@@ -5,7 +5,7 @@ kernel source repository to any AI model or developer, and they can continue dev
 without any prior session knowledge.
 
 - **Repo (kernel):** https://github.com/AKALIorg/android_kernel_xiaomi_mt6895
-- **Branch:** `16.2-rebase`
+- **Branch:** `17.0` (Android 17 baseline; `16.2-rebase` remains for 16.x ROMs)
 - **Repo (releases):** https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases
 - **Maintainer / owner:** AKALIorg (alirahsepar199@gmail.com), GitHub user `AKALIorg`
 - **Device:** Xiaomi POCO X4 GT (`xaga`), 8GB RAM — Dimensity **8100** (MT6895Z):
@@ -18,8 +18,8 @@ without any prior session knowledge.
   is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
 - **Current stable sublevel:** **5.10.269** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
-  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 currently).
-  `uname -r` shows `5.10.269-android12-...-ESK-Reborn_V0.3/<git-sha12>`.
+  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (`V17.0` on `17.0`,
+  `V0.3` on `16.2-rebase`). `uname -r` shows `5.10.269-android12-...-ESK-Reborn_V17.0/<git-sha12>` on 17.0.
 
 ---
 
