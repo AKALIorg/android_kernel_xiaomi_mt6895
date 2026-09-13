@@ -33,10 +33,12 @@ without any prior session knowledge.
 - **Builder patches** applied at setup time (in this order):
   1. SuSFS: `git clone gitlab.com:simonpunk/susfs4ksu -b gki-android12-5.10`, copies
      `kernel_patches/fs/*` + `include/*`, then `patch -p1 --fuzz=3 < 50_add_susfs_in_gki-android12-5.10.patch`
-     — **fixup in `build/setup.sh:apply_susfs()`** for `769e31f` statfs bug (see §14): injects
-     `susfs_is_inode_sus_kstat`/`susfs_sus_kstat_spoof_vfs_statfs`/`susfs_get_non_sus_vfsmnt`
-     externs early in `fs/statfs.c` (before `susfs_statfs_by_dentry`) — upstream patch declares
-     them after first use, triggering `-Werror=implicit-function-declaration` with clang 22.
+     — **fixup for `769e31f` statfs bug (see §14):** kernel `fs/statfs.c:12` now carries early
+     `extern susfs_is_inode_sus_kstat`/`susfs_sus_kstat_spoof_vfs_statfs`/`susfs_get_non_sus_vfsmnt`
+     (guarded by `CONFIG_KSU_SUSFS_*`) so a clean clone + patch already compiles; builder
+     `build/setup.sh:apply_susfs()` keeps an idempotent `awk` injector as a safety net for
+     older trees — upstream patch declares them after first use, triggering
+     `-Werror=implicit-function-declaration` with clang 22.
   2. **LXC support:** `~/esk_builder/kernel_patches/lxc_support.patch` (adds SYSVIPC,
      POSIX_MQUEUE, namespaces, CGROUP_DEVICE, NAT netfilter bits to gki_defconfig —
      uses ANDROID_KABI_RESERVE(6/7/8) in `include/linux/sched.h`; ESK's BORE uses reserves 1-4,
