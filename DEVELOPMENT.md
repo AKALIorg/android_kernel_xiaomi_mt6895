@@ -134,8 +134,9 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar `2a8e879f`): TASK_NEW no reweight, IDLE keeps `WEIGHT_IDLEPRIO`, reset walk uses `task_rq_lock`+`for_each_process_thread`, `fork_atavistic` extra2 → `SYSCTL_ZERO` |
 | `9b9ad306` | **sched_yield EEVDF fix** (Templar `8a9affcf`): `deadline += one slice` replaces no-op skip buddy; supersedes our `90bac8e9` entitled-entity variant |
 | `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar `b21d737` + `10d579`): file-reclaim no longer blocked by `anon_below_min` on swapless, `clean_low_ratio` default 15→5 |
-| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): guard `v4l2_ctrl` handler when CID disabled, revert of 5.10.241 revert |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` `CHECK_SERVICE_0` guards KEPT; v4l2-ctrls core part REVERTED by `d8634229` (camera-open panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
+| `d8634229` | **camera panic fix: revert v4l2 per-frame alloc** — `v4l2-ctrls.c` back to no-op `request_complete` on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean (builder clang) |
 | — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.269 superset therefore A17-ready (no extra patch needed; see §16.1) |
 
 ### 2.1 Known-in-tree-but-inert features
@@ -407,8 +408,9 @@ Commit message format (Android Common Kernel rules):
 | `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar 2a8e879f) — see §2 |
 | `9b9ad306` | **sched_yield EEVDF fix** (Templar 8a9affcf) — replaces 90bac8e9 variant |
 | `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar b21d737 + 10d579) — see §2 |
-| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge f89055 + 23f18ca) — see §2 |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge f89055 + 23f18ca) — see §2; v4l2 core part later REVERTED by `d8634229` (camera panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge e11295) — see §2 |
+| `d8634229` | **REVERT v4l2 core part of ed9ed6f3 (camera-open panic fix)** — `request_complete` no-op again on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean; see §14 |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -517,6 +519,7 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | Thermal poller busy-rearm with no temp source (upstream Linux4) | Poll re-armed forever with neither temp source configured | `088c0f23` | fixed in tree |
 | ZRAM writeback wear (UFS health) | Writeback writes cold pages to flash | `5a64ca47` (removed) | fixed |
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
+| Camera open → instant reboot/panic (first seen after `ed9ed6f3`, 2026-09-13) | Upstream `c3bf5129` backport made `v4l2_ctrl_request_complete()` kzalloc+bind a handler for every control-less request — runs per preview frame in vb2 hot path on a vendor 5.10.269 tree whose `media_request` core predates it (XagaForge hit the same panic at `7b4c52fd`) | `d8634229` (revert v4l2 core to no-op, keep AIE `CHECK_SERVICE_0` guards) | fixed in tree, NEEDS on-device camera validation |
 
 **Last known 100% crash-free baseline: 0.2 (dd3b1030, 5.10.266).** 0.3 Beta 2 (25176a53)
 fixes all known regressions but has less cumulative on-device hours than 0.2.
@@ -563,9 +566,11 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 + v2.2 + stable fixes (HEAD `8f3defb9`).** 5.10.269, ESK v2.2,
-Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/media/mali
-fixes from XagaForge — all pushed to `16.2-rebase`. A17 boot on xaga verified
+**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix (HEAD `d8634229`).** 5.10.269, ESK v2.2,
+Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
+fixes from XagaForge — on `17.0` (cherry-picked to `16.2-rebase`). The XagaForge
+v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
+A17 boot on xaga verified
 via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
 
 ### 16.1 Android 17 readiness (checked Sep 2026)
@@ -584,8 +589,9 @@ via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
   builder LXC patch adds `USER_NS`/`PID_NS` at build time for Droidspaces.
 
 ### Roadmap (priority order)
-1. **On-device validation of HEAD** (`8f3defb9`) on A17 ROM — user builds
+1. **On-device validation of HEAD** (`d8634229`) on A17 ROM — user builds
    KSU-SUSFS-LXC variant, runs §6 checklist + gaming session. Verify:
+   **camera opens with zero reboots** (regression test for §14 `d8634229`),
    `gaming_mode` + `prime_gaming_floor_pct` (default **64**) on policy7,
    CPU7 no longer oscillating 300↔2850, freq trace sane under throttle
    (`fceil/max_seen` path), media (AIE) no crash, GPU IPA sane
