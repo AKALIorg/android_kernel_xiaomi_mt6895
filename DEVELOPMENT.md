@@ -33,6 +33,10 @@ without any prior session knowledge.
 - **Builder patches** applied at setup time (in this order):
   1. SuSFS: `git clone gitlab.com:simonpunk/susfs4ksu -b gki-android12-5.10`, copies
      `kernel_patches/fs/*` + `include/*`, then `patch -p1 --fuzz=3 < 50_add_susfs_in_gki-android12-5.10.patch`
+     — **fixup in `build/setup.sh:apply_susfs()`** for `769e31f` statfs bug (see §14): injects
+     `susfs_is_inode_sus_kstat`/`susfs_sus_kstat_spoof_vfs_statfs`/`susfs_get_non_sus_vfsmnt`
+     externs early in `fs/statfs.c` (before `susfs_statfs_by_dentry`) — upstream patch declares
+     them after first use, triggering `-Werror=implicit-function-declaration` with clang 22.
   2. **LXC support:** `~/esk_builder/kernel_patches/lxc_support.patch` (adds SYSVIPC,
      POSIX_MQUEUE, namespaces, CGROUP_DEVICE, NAT netfilter bits to gki_defconfig —
      uses ANDROID_KABI_RESERVE(6/7/8) in `include/linux/sched.h`; ESK's BORE uses reserves 1-4,
@@ -406,9 +410,10 @@ Commit message format (Android Common Kernel rules):
 | `779b6e85` | **EEVDF rescale on reweight** (Templar 77672e88, mainline eab03c23) — see §2 |
 | `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar 2a8e879f) — see §2 |
 | `9b9ad306` | **sched_yield EEVDF fix** (Templar 8a9affcf) — replaces 90bac8e9 variant |
-| `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar b21d737 + 10d579) — see §2 |
-| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge f89055 + 23f18ca) — see §2 |
-| `8f3defb9` | **mali IPA clock fix** (XagaForge e11295) — see §2 |
+| `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar `b21d737` + `10d579`): file-reclaim no longer blocked by `anon_below_min` on swapless, `clean_low_ratio` default 15→5 |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): guard `v4l2_ctrl` handler when CID disabled, revert of 5.10.241 revert |
+| `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
+| — | **builder infrastructure fix (2026-09-13): SuSFS 769e31f statfs build break** — `fs/statfs.c` `extern susfs_sus_kstat_spoof_vfs_statfs` declared after first use in `susfs_statfs_by_dentry()` → clang 22 `-Werror=implicit-function-declaration` + `make[2]: fs/statfs.o Error 1` → `__sub-make Error 2` on every KSU+SUSFS variant; root cause upstream `susfs4ksu` `769e31f` patch ordering. Fixed in `~/esk_builder/build/setup.sh:apply_susfs()` (awk injects early externs before `susfs_statfs_by_dentry`; idempotent guard) + patched live `~/esk_builder/kernel/fs/statfs.c`; verified `fs/statfs.o`, `fs/*`, `drivers/kernelsu/built-in.a` compile clean (§1.2, `DEVELOPMENT.md:1.1/14`) |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -517,6 +522,7 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | Thermal poller busy-rearm with no temp source (upstream Linux4) | Poll re-armed forever with neither temp source configured | `088c0f23` | fixed in tree |
 | ZRAM writeback wear (UFS health) | Writeback writes cold pages to flash | `5a64ca47` (removed) | fixed |
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
+| Build failure `fs/statfs.c:88` implicit `susfs_sus_kstat_spoof_vfs_statfs` → `__sub-make Error 2` on KSU+SUSFS | SuSFS patch `769e31f` places `extern` after `susfs_statfs_by_dentry()` (clang `-Werror`) | `~/esk_builder/build/setup.sh:apply_susfs()` early-extern fixup + live `fs/statfs.c` patch | fixed (2026-09-13) |
 
 **Last known 100% crash-free baseline: 0.2 (dd3b1030, 5.10.266).** 0.3 Beta 2 (25176a53)
 fixes all known regressions but has less cumulative on-device hours than 0.2.
