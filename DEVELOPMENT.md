@@ -579,7 +579,7 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (HEAD `b2cc12d369f6`).** 5.10.270, ESK v2.2,
+**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (17.0 HEAD, includes `870efaea` + `cde9d859`).** 5.10.270, ESK v2.2,
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
 fixes from XagaForge — on `17.0` (cherry-picked to `16.2-rebase`). The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
@@ -602,7 +602,7 @@ via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
   builder LXC patch adds `USER_NS`/`PID_NS` at build time for Droidspaces.
 
 ### Roadmap (priority order)
-1. **On-device validation of HEAD** (`b2cc12d369f6`) on A17 ROM — user builds
+1. **On-device validation of 17.0 HEAD** on A17 ROM — user builds
    KSU-SUSFS-LXC variant, runs §6 checklist + gaming session. Verify:
    **camera opens with zero reboots** (regression test for §14 `cde9d859`),
    `gaming_mode` + `prime_gaming_floor_pct` (default **64**) on policy7,
