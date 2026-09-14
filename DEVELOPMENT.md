@@ -56,7 +56,12 @@ Single-file compile tests with the builder's clang against the prepared work tre
 ```bash
 K="/home/akali/Documents/Default Project/android_kernel_xiaomi_mt6895"
 W=~/esk_builder/work
-# copy changed files to BOTH $W/<path> AND ~/esk_builder/kernel/<path>
+# copy changed files to ~/esk_builder/kernel/<path> ONLY (srctree) - NEVER
+# copy sources into $W: a $W copy SHADOWS srctree for that file and breaks
+# its quoted sibling includes (2026-09-14: services.c shadow without
+# context.h broke the full build with a bogus 'context.h not found').
+# If a build fails on a missing sibling header, check for $W shadows first:
+#   for f in $(git diff HEAD --name-only); do rm -f ~/esk_builder/work/$f; done
 cd $W && export PATH=~/esk_builder/clang/bin:$PATH
 # config: merge fresh when needed
 bash ~/esk_builder/kernel/scripts/kconfig/merge_config.sh -m .config <(fragment) 
@@ -64,8 +69,15 @@ make O=. ARCH=arm64 CC=clang HOSTCC=clang LLVM=1 LLVM_IAS=1 olddefconfig
 make O=. ARCH=arm64 CC=clang HOSTCC=clang LLVM=1 LLVM_IAS=1 <path/to/file.o>
 ```
 Notes:
-- `O=` builds read sources from `~/esk_builder/kernel` (srctree) — the work-tree copies
-  of files that are only in `work/` are ignored for headers; when in doubt copy to both.
+- `O=` builds read sources from `~/esk_builder/kernel` (srctree), falling back
+  to it whenever a file is absent under `work/`. A source file present in BOTH
+  places compiles the `work/` copy — with ITS directory as the quoted-include
+  base — so a partial sync (e.g. services.c without context.h) fails the build
+  while srctree alone is fine. Rule: sources live ONLY in srctree; `work/` holds
+  outputs (.o/.cmd/.config) plus build-GENERATED sources (.asn1.c/.mod.c) which
+  must stay. 454 legacy .c + 3508 .h copies predate this rule in `work/` and are
+  benign (full builds passed with them); do NOT bulk-delete, only remove shadows
+  of files you are actively verifying.
 - vdso prepare may fail on the host (bfd vs llvm emulation) — ignore, build single objects.
 - NEVER trust `git push` — **always verify with `git log --oneline origin/<branch> -1`** after
   pushing. Pushes have silently failed before.
@@ -140,7 +152,7 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` `CHECK_SERVICE_0` guards KEPT; v4l2-ctrls core part REVERTED by `d8634229` (camera-open panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
 | `d8634229` | **camera panic fix: revert v4l2 per-frame alloc** — `v4l2-ctrls.c` back to no-op `request_complete` on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean (builder clang) |
-| `870efaea` | **5.10.270 stable merge** (686 files, 20 conflicts; hand merges: schedutil refactor+GKI up/down kept, platform reorg, xhci bounce fix, irqdomain decls+KABI, remoteproc deleting-flag adapt, KMAP_LOCAL+DAMON, sunrpc/inet_connection_sock takes; kept HEAD: nfsd/lockd/bpf-cgroup/fsnotify/u_audio — see §10) |
+| `870efaea` | **5.10.270 stable merge** (686 files, 20 conflicts; hand merges: schedutil refactor+GKI up/down kept, platform reorg, xhci bounce fix, irqdomain decls+KABI, remoteproc deleting-flag adapt, KMAP_LOCAL+DAMON, sunrpc/inet_connection_sock takes; kept HEAD: nfsd/lockd/bpf-cgroup/fsnotify/u_audio — see §10; inotify half-merge later fixed by `2bb2bf58`) |
 | — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.270 superset therefore A17-ready (no extra patch needed; see §16.1) |
 
 ### 2.1 Known-in-tree-but-inert features
@@ -416,6 +428,7 @@ Commit message format (Android Common Kernel rules):
 | `8f3defb9` | **mali IPA clock fix** (XagaForge e11295) — see §2 |
 | `d8634229` | **REVERT v4l2 core part of ed9ed6f3 (camera-open panic fix)** — `request_complete` no-op again on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean; see §14 |
 | `870efaea` | **5.10.270 stable merge** — 686 files / 792 upstream commits, 20 conflicted files. Took upstream: schedutil refactor core (sg_cpu util/max, void getters), platform driver-core reorg (old blocks deleted, GKI cast kept), xhci bounce-buffer fix (sysdev), irqdomain_info/instantiate (in KABI guard), KMAP_LOCAL (+DAMON kept), sunrpc threadless-pool fallback, inet_csk_prepare out-of-line, rproc_detach decl. Kept HEAD: GKI schedutil up/down variant (dropped uncompilable single-rate helper), no-busy-check, remoteproc core + adapted 2× RPROC_DELETED→deleting flag (DETACHED rename would break attach-boot), nfsd/lockd/bpf-cgroup (dead/no-callers), fsnotify (27d172b60eec is a 4-part unit — partial take left undefined refs, reverted), u_audio (UAF fix needs ureq layout + drops suspend/volume API used by f_uac1/2). KABI reserves 1-4 intact, SUBLEVEL 270. Compile clean (builder clang): schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
+| `2bb2bf58` | **inotify half-merge fix + work-shadow rule** — restored GKI `inotify_update_existing_watch` (270 had taken 1/4 of upstream `27d172b60eec`, breaking `inotify_user.o`); deleted 686 stale `work/` source shadows that broke O= sibling includes (bogus selinux `context.h` failure); §1.2 corrected to srctree-only sync + §14 build-failure row |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -525,6 +538,7 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | ZRAM writeback wear (UFS health) | Writeback writes cold pages to flash | `5a64ca47` (removed) | fixed |
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
 | Camera open → instant reboot/panic (first seen after `ed9ed6f3`, 2026-09-13) | Upstream `c3bf5129` backport made `v4l2_ctrl_request_complete()` kzalloc+bind a handler for every control-less request — runs per preview frame in vb2 hot path on a vendor 5.10.269 tree whose `media_request` core predates it (XagaForge hit the same panic at `7b4c52fd`) | `d8634229` (revert v4l2 core to no-op, keep AIE `CHECK_SERVICE_0` guards) | fixed in tree, NEEDS on-device camera validation |
+| Full build break after 270 merge (2026-09-14, `Image modules` link stage): (a) `inotify_user.o` undefined `INOTIFY_MARK_FLAGS` + implicit `inotify_arg_to_flags` — the merge took 1 of 4 parts of upstream `27d172b60eec`; (b) bogus `security/selinux/ss/services.c:56 'context.h' not found` — a stale `work/` shadow copy of services.c without its sibling (repo was fine; O= builds prefer `work/` copies, see §1.2) | (a) half-merged upstream unit; (b) verification sync copied 686 merge files into `work/` | `2bb2bf58` (restore GKI inotify) + deleted all 686 `work/` shadows (services.o then builds clean; shadows must never be re-created, §1.2) | fixed in tree, user to rebuild |
 
 **Last known 100% crash-free baseline: 0.2 (dd3b1030, 5.10.266).** 0.3 Beta 2 (25176a53)
 fixes all known regressions but has less cumulative on-device hours than 0.2.
