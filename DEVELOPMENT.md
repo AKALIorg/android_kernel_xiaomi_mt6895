@@ -6,6 +6,9 @@ without any prior session knowledge.
 
 - **Repo (kernel):** https://github.com/AKALIorg/android_kernel_xiaomi_mt6895
 - **Branch:** `17.0` (Android 17 baseline; `16.2-rebase` remains for 16.x ROMs)
+- **Push policy: every functional change AND every stable merge lands on BOTH
+  `17.0` and `16.2-rebase`** (merge direction: `16.2-rebase` → `17.0`, then
+  push both + verify each with `git log --oneline origin/<branch> -1`).
 - **Repo (releases):** https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases
 - **Maintainer / owner:** AKALIorg (alirahsepar199@gmail.com), GitHub user `AKALIorg`
 - **Device:** Xiaomi POCO X4 GT (`xaga`), 8GB RAM — Dimensity **8100** (MT6895Z):
@@ -14,12 +17,13 @@ without any prior session knowledge.
   1024 (big+prime). THREE cpufreq performance-domains in `mt6895.dts` (0=CPU0-3, 1=CPU4-6, 2=CPU7).
 - **OS base:** Google **android12-5.10** GKI common kernel (device ships with Android 12);
   ROM support target: Android 16/17 custom ROMs (A17 boot verified Sep 2026 on
-  `Angxddeep/android_kernel_xiaomi_mt6895:seventeen` @ 5.10.264 — our 5.10.269
-  is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
-- **Current stable sublevel:** **5.10.269** (tracked; check kernel.org for newer).
+   `Angxddeep/android_kernel_xiaomi_mt6895:seventeen` @ 5.10.264 — our 5.10.270
+   is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
+- **Current stable sublevel:** **5.10.270** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
-  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (`V17.0` on `17.0`,
-  `V0.3` on `16.2-rebase`). `uname -r` shows `5.10.269-android12-...-ESK-Reborn_V17.0/<git-sha12>` on 17.0.
+  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 on both
+  branches; the `17.0` V17.0 bump was reverted in `0edb2f37`).
+  `uname -r` shows `5.10.270-android12-...-ESK-Reborn_V0.3/<git-sha12>`.
 
 ---
 
@@ -143,7 +147,8 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` `CHECK_SERVICE_0` guards KEPT; v4l2-ctrls core part REVERTED by `cde9d859` (camera-open panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
 | `cde9d859` | **camera panic fix: revert v4l2 per-frame alloc** — `v4l2-ctrls.c` back to no-op `request_complete` on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean (builder clang) |
-| — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.269 superset therefore A17-ready (no extra patch needed; see §16.1) |
+| `870efaea` | **5.10.270 stable merge** (merged from `16.2-rebase`; 686 files, 20 conflicts — see §10 for resolutions) |
+| — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.270 superset therefore A17-ready (no extra patch needed; see §16.1) |
 
 ### 2.1 Known-in-tree-but-inert features
 - **NoMount**: dentry-op hooks only attach to dentries with registered rules; zero rules
@@ -418,6 +423,7 @@ Commit message format (Android Common Kernel rules):
 | `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
 | `cde9d859` | **REVERT v4l2 core part of ed9ed6f3 (camera-open panic fix)** — `request_complete` no-op again on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean; see §14 |
 | — | **builder infrastructure fix (2026-09-13): SuSFS 769e31f statfs build break** — `fs/statfs.c` `extern susfs_sus_kstat_spoof_vfs_statfs` declared after first use in `susfs_statfs_by_dentry()` → clang 22 `-Werror=implicit-function-declaration` + `make[2]: fs/statfs.o Error 1` → `__sub-make Error 2` on every KSU+SUSFS variant; root cause upstream `susfs4ksu` `769e31f` patch ordering. Fixed in `~/esk_builder/build/setup.sh:apply_susfs()` (awk injects early externs before `susfs_statfs_by_dentry`; idempotent guard) + patched live `~/esk_builder/kernel/fs/statfs.c`; verified `fs/statfs.o`, `fs/*`, `drivers/kernelsu/built-in.a` compile clean (§1.2, `DEVELOPMENT.md:1.1/14`) |
+| `870efaea` | **5.10.270 stable merge** (from `16.2-rebase`) — 686 files / 792 upstream commits, 20 conflicted files. Took upstream: schedutil refactor core (sg_cpu util/max, void getters), platform driver-core reorg (old blocks deleted, GKI cast kept), xhci bounce-buffer fix (sysdev), irqdomain_info/instantiate (in KABI guard), KMAP_LOCAL (+DAMON kept), sunrpc threadless-pool fallback, inet_csk_prepare out-of-line, rproc_detach decl. Kept HEAD: GKI schedutil up/down variant (dropped uncompilable single-rate helper), no-busy-check, remoteproc core + adapted 2× RPROC_DELETED→deleting flag, nfsd/lockd/bpf-cgroup (dead/no-callers), fsnotify (4-part unit reverted for coherence), u_audio (UAF fix inapplicable to GKI layout). KABI reserves 1-4 intact, SUBLEVEL 270. Compile clean (builder clang): schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -435,7 +441,7 @@ Commit message format (Android Common Kernel rules):
 ### Kernel sources
 - Kernel source repo: https://github.com/AKALIorg/android_kernel_xiaomi_mt6895 (branch 16.2-rebase)
 - Releases repo: https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases (branch main)
-- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.269 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
+- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.270 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
 - AOSP common: https://android.googlesource.com/kernel/common (branch android12-5.10 / android12-5.10-lts)
 - Builder reference (closed, on user PC): `~/esk_builder/` (see §1.1)
 
@@ -526,7 +532,6 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | Thermal poller busy-rearm with no temp source (upstream Linux4) | Poll re-armed forever with neither temp source configured | `088c0f23` | fixed in tree |
 | ZRAM writeback wear (UFS health) | Writeback writes cold pages to flash | `5a64ca47` (removed) | fixed |
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
-| Build failure `fs/statfs.c:88` implicit `susfs_sus_kstat_spoof_vfs_statfs` → `__sub-make Error 2` on KSU+SUSFS | SuSFS patch `769e31f` places `extern` after `susfs_statfs_by_dentry()` (clang `-Werror`) | `~/esk_builder/build/setup.sh:apply_susfs()` early-extern fixup + live `fs/statfs.c` patch | fixed (2026-09-13) |
 | Camera open → instant reboot/panic (first seen after `ed9ed6f3`, 2026-09-13) | Upstream `c3bf5129` backport made `v4l2_ctrl_request_complete()` kzalloc+bind a handler for every control-less request — runs per preview frame in vb2 hot path on a vendor 5.10.269 tree whose `media_request` core predates it (XagaForge hit the same panic at `7b4c52fd`) | `cde9d859` (revert v4l2 core to no-op, keep AIE `CHECK_SERVICE_0` guards) | fixed in tree, NEEDS on-device camera validation |
 
 **Last known 100% crash-free baseline: 0.2 (dd3b1030, 5.10.266).** 0.3 Beta 2 (25176a53)
@@ -574,7 +579,7 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix (HEAD `cde9d859`).** 5.10.269, ESK v2.2,
+**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (HEAD `b2cc12d369f6`).** 5.10.270, ESK v2.2,
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
 fixes from XagaForge — on `17.0` (cherry-picked to `16.2-rebase`). The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
@@ -584,7 +589,7 @@ via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
 ### 16.1 Android 17 readiness (checked Sep 2026)
 
 * **Base:** `Angxddeep/...:seventeen` boots A17 on xaga at 5.10.264 with minimal
-  vendor configs (no Polly, no UNAME_OVERRIDE). Our `16.2-rebase` is 5.10.269 +
+  vendor configs (no Polly, no UNAME_OVERRIDE). Our `16.2-rebase` is 5.10.270 +
   strict superset — version string spoof (`UNAME_OVERRIDE` → `5.10.226-...`)
   stays for Play Integrity and does not affect boot; A17 init does not require
   a GKI bump or selinux genfscon patch (already in 5.10.269 via `b55531ca`).
@@ -597,7 +602,7 @@ via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
   builder LXC patch adds `USER_NS`/`PID_NS` at build time for Droidspaces.
 
 ### Roadmap (priority order)
-1. **On-device validation of HEAD** (`cde9d859`) on A17 ROM — user builds
+1. **On-device validation of HEAD** (`b2cc12d369f6`) on A17 ROM — user builds
    KSU-SUSFS-LXC variant, runs §6 checklist + gaming session. Verify:
    **camera opens with zero reboots** (regression test for §14 `cde9d859`),
    `gaming_mode` + `prime_gaming_floor_pct` (default **64**) on policy7,
