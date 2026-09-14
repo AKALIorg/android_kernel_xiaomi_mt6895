@@ -5,7 +5,10 @@ kernel source repository to any AI model or developer, and they can continue dev
 without any prior session knowledge.
 
 - **Repo (kernel):** https://github.com/AKALIorg/android_kernel_xiaomi_mt6895
-- **Branch:** `16.2-rebase`
+- **Branch:** `16.2-rebase` (16.x ROMs; `17.0` is the Android 17 baseline)
+- **Push policy: every functional change AND every stable merge lands on BOTH
+  `16.2-rebase` and `17.0`** (merge direction: `16.2-rebase` → `17.0`, then
+  push both + verify each with `git log --oneline origin/<branch> -1`).
 - **Repo (releases):** https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases
 - **Maintainer / owner:** AKALIorg (alirahsepar199@gmail.com), GitHub user `AKALIorg`
 - **Device:** Xiaomi POCO X4 GT (`xaga`), 8GB RAM — Dimensity **8100** (MT6895Z):
@@ -342,7 +345,7 @@ Commit message format (Android Common Kernel rules):
 
 1. Read this file fully.
 2. `git -C <repo> log --oneline -30` and compare against §2 table — confirm no drift.
-3. Check `git log origin/16.2-rebase -1` matches local (push verification habit).
+3. Check `git log origin/16.2-rebase -1` AND `git log origin/17.0 -1` match local (push verification habit — both branches).
 4. Check kernel.org for new 5.10.x; check Templar branches for governor updates
    (v2.2 port is queued — §3.1).
 5. Ask the user what variant they built and what they tested; pull fresh logs if issues.
