@@ -352,7 +352,7 @@ Commit message format (Android Common Kernel rules):
 
 1. Read this file fully.
 2. `git -C <repo> log --oneline -30` and compare against §2 table — confirm no drift.
-3. Check `git log origin/16.2-rebase -1` matches local (push verification habit).
+3. Check `git log origin/17.0 -1` AND `git log origin/16.2-rebase -1` match local (push verification habit — both branches).
 4. Check kernel.org for new 5.10.x; check Templar branches for governor updates
    (v2.2 port is queued — §3.1).
 5. Ask the user what variant they built and what they tested; pull fresh logs if issues.
