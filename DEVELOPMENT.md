@@ -14,12 +14,12 @@ without any prior session knowledge.
   1024 (big+prime). THREE cpufreq performance-domains in `mt6895.dts` (0=CPU0-3, 1=CPU4-6, 2=CPU7).
 - **OS base:** Google **android12-5.10** GKI common kernel (device ships with Android 12);
   ROM support target: Android 16/17 custom ROMs (A17 boot verified Sep 2026 on
-  `Angxddeep/android_kernel_xiaomi_mt6895:seventeen` @ 5.10.264 — our 5.10.269
-  is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
-- **Current stable sublevel:** **5.10.269** (tracked; check kernel.org for newer).
+   `Angxddeep/android_kernel_xiaomi_mt6895:seventeen` @ 5.10.264 — our 5.10.270
+   is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
+- **Current stable sublevel:** **5.10.270** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
   `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 currently).
-  `uname -r` shows `5.10.269-android12-...-ESK-Reborn_V0.3/<git-sha12>`.
+  `uname -r` shows `5.10.270-android12-...-ESK-Reborn_V0.3/<git-sha12>`.
 
 ---
 
@@ -137,7 +137,8 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` `CHECK_SERVICE_0` guards KEPT; v4l2-ctrls core part REVERTED by `d8634229` (camera-open panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
 | `d8634229` | **camera panic fix: revert v4l2 per-frame alloc** — `v4l2-ctrls.c` back to no-op `request_complete` on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean (builder clang) |
-| — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.269 superset therefore A17-ready (no extra patch needed; see §16.1) |
+| `870efaea` | **5.10.270 stable merge** (686 files, 20 conflicts; hand merges: schedutil refactor+GKI up/down kept, platform reorg, xhci bounce fix, irqdomain decls+KABI, remoteproc deleting-flag adapt, KMAP_LOCAL+DAMON, sunrpc/inet_connection_sock takes; kept HEAD: nfsd/lockd/bpf-cgroup/fsnotify/u_audio — see §10) |
+| — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.270 superset therefore A17-ready (no extra patch needed; see §16.1) |
 
 ### 2.1 Known-in-tree-but-inert features
 - **NoMount**: dentry-op hooks only attach to dentries with registered rules; zero rules
@@ -411,6 +412,7 @@ Commit message format (Android Common Kernel rules):
 | `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge f89055 + 23f18ca) — see §2; v4l2 core part later REVERTED by `d8634229` (camera panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge e11295) — see §2 |
 | `d8634229` | **REVERT v4l2 core part of ed9ed6f3 (camera-open panic fix)** — `request_complete` no-op again on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean; see §14 |
+| `870efaea` | **5.10.270 stable merge** — 686 files / 792 upstream commits, 20 conflicted files. Took upstream: schedutil refactor core (sg_cpu util/max, void getters), platform driver-core reorg (old blocks deleted, GKI cast kept), xhci bounce-buffer fix (sysdev), irqdomain_info/instantiate (in KABI guard), KMAP_LOCAL (+DAMON kept), sunrpc threadless-pool fallback, inet_csk_prepare out-of-line, rproc_detach decl. Kept HEAD: GKI schedutil up/down variant (dropped uncompilable single-rate helper), no-busy-check, remoteproc core + adapted 2× RPROC_DELETED→deleting flag (DETACHED rename would break attach-boot), nfsd/lockd/bpf-cgroup (dead/no-callers), fsnotify (27d172b60eec is a 4-part unit — partial take left undefined refs, reverted), u_audio (UAF fix needs ureq layout + drops suspend/volume API used by f_uac1/2). KABI reserves 1-4 intact, SUBLEVEL 270. Compile clean (builder clang): schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -428,7 +430,7 @@ Commit message format (Android Common Kernel rules):
 ### Kernel sources
 - Kernel source repo: https://github.com/AKALIorg/android_kernel_xiaomi_mt6895 (branch 16.2-rebase)
 - Releases repo: https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases (branch main)
-- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.269 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
+- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.270 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
 - AOSP common: https://android.googlesource.com/kernel/common (branch android12-5.10 / android12-5.10-lts)
 - Builder reference (closed, on user PC): `~/esk_builder/` (see §1.1)
 
@@ -566,7 +568,7 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix (HEAD `d8634229`).** 5.10.269, ESK v2.2,
+**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (HEAD `870efaea`).** 5.10.270, ESK v2.2,
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
 fixes from XagaForge — on `17.0` (cherry-picked to `16.2-rebase`). The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
@@ -576,7 +578,7 @@ via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
 ### 16.1 Android 17 readiness (checked Sep 2026)
 
 * **Base:** `Angxddeep/...:seventeen` boots A17 on xaga at 5.10.264 with minimal
-  vendor configs (no Polly, no UNAME_OVERRIDE). Our `16.2-rebase` is 5.10.269 +
+  vendor configs (no Polly, no UNAME_OVERRIDE). Our `16.2-rebase` is 5.10.270 +
   strict superset — version string spoof (`UNAME_OVERRIDE` → `5.10.226-...`)
   stays for Play Integrity and does not affect boot; A17 init does not require
   a GKI bump or selinux genfscon patch (already in 5.10.269 via `b55531ca`).
