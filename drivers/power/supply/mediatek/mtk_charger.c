@@ -2192,6 +2192,30 @@ int input_suspend_set_flag(int val)
 	return 0;
 }
 EXPORT_SYMBOL(input_suspend_set_flag);
+int bypass_charging_get_flag(void)
+{
+	if (pinfo == NULL)
+		return 0;
+	return pinfo->bypass_charging;
+}
+EXPORT_SYMBOL(bypass_charging_get_flag);
+int bypass_charging_set_flag(int val)
+{
+	int bypass = 0;
+
+	bypass = !!val;
+	if (pinfo) {
+		pinfo->bypass_charging = bypass;
+		if (bypass && pinfo->chg1_dev)
+			charger_dev_enable_powerpath(pinfo->chg1_dev, true);
+		power_supply_changed(pinfo->psy1);
+		_wake_up_charger(pinfo);
+	}
+	chr_err("%s %d bypass_charging=%d\n", __func__, val,
+		pinfo ? pinfo->bypass_charging : -1);
+	return 0;
+}
+EXPORT_SYMBOL(bypass_charging_set_flag);
 static ssize_t sc_ibat_limit_store(
 	struct device *dev, struct device_attribute *attr,
 					 const char *buf, size_t size)
@@ -2546,6 +2570,8 @@ static void charger_check_status(struct mtk_charger *info)
 	if (info->vbusov_stat)
 		charging = false;
 	if (info->sc.disable_charger == true)
+		charging = false;
+	if (info->bypass_charging)
 		charging = false;
 stop_charging:
 	mtk_battery_notify_check(info);
@@ -4392,6 +4418,37 @@ static int input_suspend_set(struct mtk_charger *gm,
 	return 0;
 }
 
+static int bypass_charging_get(struct mtk_charger *gm,
+	struct mtk_usb_sysfs_field_info *attr,
+	int *val)
+{
+	if (gm)
+		*val = gm->bypass_charging;
+	else
+		*val = 0;
+	chr_err("%s %d\n", __func__, *val);
+	return 0;
+}
+
+static int bypass_charging_set(struct mtk_charger *gm,
+	struct mtk_usb_sysfs_field_info *attr,
+	int val)
+{
+	bool bypass = 0;
+
+	bypass = !!val;
+	if (gm) {
+		gm->bypass_charging = bypass;
+		if (bypass && gm->chg1_dev)
+			charger_dev_enable_powerpath(gm->chg1_dev, true);
+		power_supply_changed(gm->psy1);
+		_wake_up_charger(gm);
+	}
+	chr_err("%s %d bypass_charging=%d\n", __func__, val,
+		gm ? gm->bypass_charging : -1);
+	return 0;
+}
+
 static int jeita_chg_index_get(struct mtk_charger *gm,
 	struct mtk_usb_sysfs_field_info *attr,
 	int *val)
@@ -4775,6 +4832,7 @@ static struct mtk_usb_sysfs_field_info usb_sysfs_field_tbl[] = {
 	USB_SYSFS_FIELD_RW(battcont_online, USB_PROP_BATTCONT_ONLINE),
 	USB_SYSFS_FIELD_RW(thermal_remove, USB_PROP_THERMAL_REMOVE),
 	USB_SYSFS_FIELD_RO(warm_term, USB_PROP_WARM_TERM),
+	USB_SYSFS_FIELD_RW(bypass_charging, USB_PROP_BYPASS_CHARGING),
 };
 
 int usb_get_property(enum usb_property bp,

@@ -5,9 +5,9 @@ kernel source repository to any AI model or developer, and they can continue dev
 without any prior session knowledge.
 
 - **Repo (kernel):** https://github.com/AKALIorg/android_kernel_xiaomi_mt6895
-- **Branch:** `16.2-rebase` (16.x ROMs; `17.0` is the Android 17 baseline)
+- **Branch:** `17.0` (Android 17 baseline; `16.2-rebase` remains for 16.x ROMs)
 - **Push policy: every functional change AND every stable merge lands on BOTH
-  `16.2-rebase` and `17.0`** (merge direction: `16.2-rebase` → `17.0`, then
+  `17.0` and `16.2-rebase`** (merge direction: `16.2-rebase` → `17.0`, then
   push both + verify each with `git log --oneline origin/<branch> -1`).
 - **Repo (releases):** https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases
 - **Maintainer / owner:** AKALIorg (alirahsepar199@gmail.com), GitHub user `AKALIorg`
@@ -21,7 +21,8 @@ without any prior session knowledge.
    is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
 - **Current stable sublevel:** **5.10.270** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
-  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 currently).
+  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 on both
+  branches; the `17.0` V17.0 bump was reverted in `0edb2f37`).
   `uname -r` shows `5.10.270-android12-...-ESK-Reborn_V0.3/<git-sha12>`.
 
 ---
@@ -36,6 +37,12 @@ without any prior session knowledge.
 - **Builder patches** applied at setup time (in this order):
   1. SuSFS: `git clone gitlab.com:simonpunk/susfs4ksu -b gki-android12-5.10`, copies
      `kernel_patches/fs/*` + `include/*`, then `patch -p1 --fuzz=3 < 50_add_susfs_in_gki-android12-5.10.patch`
+     — **fixup for `769e31f` statfs bug (see §14):** kernel `fs/statfs.c:12` now carries early
+     `extern susfs_is_inode_sus_kstat`/`susfs_sus_kstat_spoof_vfs_statfs`/`susfs_get_non_sus_vfsmnt`
+     (guarded by `CONFIG_KSU_SUSFS_*`) so a clean clone + patch already compiles; builder
+     `build/setup.sh:apply_susfs()` keeps an idempotent `awk` injector as a safety net for
+     older trees — upstream patch declares them after first use, triggering
+     `-Werror=implicit-function-declaration` with clang 22.
   2. **LXC support:** `~/esk_builder/kernel_patches/lxc_support.patch` (adds SYSVIPC,
      POSIX_MQUEUE, namespaces, CGROUP_DEVICE, NAT netfilter bits to gki_defconfig —
      uses ANDROID_KABI_RESERVE(6/7/8) in `include/linux/sched.h`; ESK's BORE uses reserves 1-4,
@@ -149,11 +156,12 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar `2a8e879f`): TASK_NEW no reweight, IDLE keeps `WEIGHT_IDLEPRIO`, reset walk uses `task_rq_lock`+`for_each_process_thread`, `fork_atavistic` extra2 → `SYSCTL_ZERO` |
 | `9b9ad306` | **sched_yield EEVDF fix** (Templar `8a9affcf`): `deadline += one slice` replaces no-op skip buddy; supersedes our `90bac8e9` entitled-entity variant |
 | `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar `b21d737` + `10d579`): file-reclaim no longer blocked by `anon_below_min` on swapless, `clean_low_ratio` default 15→5 |
-| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` `CHECK_SERVICE_0` guards KEPT; v4l2-ctrls core part REVERTED by `d8634229` (camera-open panic, see §14) |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` `CHECK_SERVICE_0` guards KEPT; v4l2-ctrls core part REVERTED by `cde9d859` (camera-open panic, see §14) |
 | `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
-| `d8634229` | **camera panic fix: revert v4l2 per-frame alloc** — `v4l2-ctrls.c` back to no-op `request_complete` on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean (builder clang) |
-| `870efaea` | **5.10.270 stable merge** (686 files, 20 conflicts; hand merges: schedutil refactor+GKI up/down kept, platform reorg, xhci bounce fix, irqdomain decls+KABI, remoteproc deleting-flag adapt, KMAP_LOCAL+DAMON, sunrpc/inet_connection_sock takes; kept HEAD: nfsd/lockd/bpf-cgroup/fsnotify/u_audio — see §10; inotify half-merge later fixed by `2bb2bf58`) |
+| `cde9d859` | **camera panic fix: revert v4l2 per-frame alloc** — `v4l2-ctrls.c` back to no-op `request_complete` on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean (builder clang) |
+| `870efaea` | **5.10.270 stable merge** (merged from `16.2-rebase`; 686 files, 20 conflicts — see §10 for resolutions; inotify half-merge later fixed by `a1ef0f5b`) |
 | — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.270 superset therefore A17-ready (no extra patch needed; see §16.1) |
+| `795a0e5b160f` | **Bypass charging** (xaga, `mediatek/mtk_charger.c`): `bypass_charging` flag in `struct mtk_charger` (`USB_PROP_BYPASS_CHARGING`, `bypass_charging_set_flag`/`get_flag`); when `1` forces `charging=false` in `charger_check_status()` (keeps `BUCK_EN` on via `enable_powerpath(true)`, `CHG_EN=0` via `charger_dev_enable(false)`), gates `pd_cp_manager`/`pd_single_cp_manager`/`qc_cp_manager` SM_HOLD; sysfs ` /sys/class/power_supply/usb/bypass_charging` (RW 0/1, default 0, off at boot) — kernel support for Infinix-X ROM toggle, MT6375 `CHG_EN`/`BUCK_EN` independent |
 
 ### 2.1 Known-in-tree-but-inert features
 - **NoMount**: dentry-op hooks only attach to dentries with registered rules; zero rules
@@ -357,7 +365,7 @@ Commit message format (Android Common Kernel rules):
 
 1. Read this file fully.
 2. `git -C <repo> log --oneline -30` and compare against §2 table — confirm no drift.
-3. Check `git log origin/16.2-rebase -1` AND `git log origin/17.0 -1` match local (push verification habit — both branches).
+3. Check `git log origin/17.0 -1` AND `git log origin/16.2-rebase -1` match local (push verification habit — both branches).
 4. Check kernel.org for new 5.10.x; check Templar branches for governor updates
    (v2.2 port is queued — §3.1).
 5. Ask the user what variant they built and what they tested; pull fresh logs if issues.
@@ -423,13 +431,15 @@ Commit message format (Android Common Kernel rules):
 | `779b6e85` | **EEVDF rescale on reweight** (Templar 77672e88, mainline eab03c23) — see §2 |
 | `659dc646` | **BORE weight fix + fork_atavistic clamp** (Templar 2a8e879f) — see §2 |
 | `9b9ad306` | **sched_yield EEVDF fix** (Templar 8a9affcf) — replaces 90bac8e9 variant |
-| `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar b21d737 + 10d579) — see §2 |
-| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge f89055 + 23f18ca) — see §2; v4l2 core part later REVERTED by `d8634229` (camera panic, see §14) |
-| `8f3defb9` | **mali IPA clock fix** (XagaForge e11295) — see §2 |
-| `d8634229` | **REVERT v4l2 core part of ed9ed6f3 (camera-open panic fix)** — `request_complete` no-op again on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean; see §14 |
-| `870efaea` | **5.10.270 stable merge** — 686 files / 792 upstream commits, 20 conflicted files. Took upstream: schedutil refactor core (sg_cpu util/max, void getters), platform driver-core reorg (old blocks deleted, GKI cast kept), xhci bounce-buffer fix (sysdev), irqdomain_info/instantiate (in KABI guard), KMAP_LOCAL (+DAMON kept), sunrpc threadless-pool fallback, inet_csk_prepare out-of-line, rproc_detach decl. Kept HEAD: GKI schedutil up/down variant (dropped uncompilable single-rate helper), no-busy-check, remoteproc core + adapted 2× RPROC_DELETED→deleting flag (DETACHED rename would break attach-boot), nfsd/lockd/bpf-cgroup (dead/no-callers), fsnotify (27d172b60eec is a 4-part unit — partial take left undefined refs, reverted), u_audio (UAF fix needs ureq layout + drops suspend/volume API used by f_uac1/2). KABI reserves 1-4 intact, SUBLEVEL 270. Compile clean (builder clang): schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
-| `2bb2bf58` | **inotify half-merge fix + work-shadow rule** — restored GKI `inotify_update_existing_watch` (270 had taken 1/4 of upstream `27d172b60eec`, breaking `inotify_user.o`); deleted 686 stale `work/` source shadows that broke O= sibling includes (bogus selinux `context.h` failure); §1.2 corrected to srctree-only sync + §14 build-failure row |
-| `3cfc8da6` | **inet_csk link fix** — upstream `5d5389b2c37c`'s `this_cpu_inc(*orphan_count)` cannot link on 5.10 (`struct percpu_counter *`, fallback symbol undefined); restored `percpu_counter_inc`, kept upstream TCP cb-flags clear |
+| `3f5a3f13` / `cf88c2d8` | **le9uo reclaim fix + default 5** (Templar `b21d737` + `10d579`): file-reclaim no longer blocked by `anon_below_min` on swapless, `clean_low_ratio` default 15→5 |
+| `ed9ed6f3` | **media: mtk-aie CID guard** (XagaForge `f89055e3` + `23f18ca4`): `mtk_aie_53.c` guards kept, v4l2 core part later REVERTED by `cde9d859` (camera panic) |
+| `8f3defb9` | **mali IPA clock fix** (XagaForge `e1129586`): consistent clock for IPA timestamps — fixes GPU IPA util accounting |
+| `cde9d859` | **REVERT v4l2 core part of ed9ed6f3 (camera-open panic fix)** — `request_complete` no-op again on control-less requests; AIE guards kept; `v4l2-ctrls.o` + `mtk_aie_53.o` compile clean; see §14 |
+| — | **builder infrastructure fix (2026-09-13): SuSFS 769e31f statfs build break** — `fs/statfs.c` `extern susfs_sus_kstat_spoof_vfs_statfs` declared after first use in `susfs_statfs_by_dentry()` → clang 22 `-Werror=implicit-function-declaration` + `make[2]: fs/statfs.o Error 1` → `__sub-make Error 2` on every KSU+SUSFS variant; root cause upstream `susfs4ksu` `769e31f` patch ordering. Fixed in `~/esk_builder/build/setup.sh:apply_susfs()` (awk injects early externs before `susfs_statfs_by_dentry`; idempotent guard) + patched live `~/esk_builder/kernel/fs/statfs.c`; verified `fs/statfs.o`, `fs/*`, `drivers/kernelsu/built-in.a` compile clean (§1.2, `DEVELOPMENT.md:1.1/14`) |
+| `870efaea` | **5.10.270 stable merge** (from `16.2-rebase`) — 686 files / 792 upstream commits, 20 conflicted files. Took upstream: schedutil refactor core (sg_cpu util/max, void getters), platform driver-core reorg (old blocks deleted, GKI cast kept), xhci bounce-buffer fix (sysdev), irqdomain_info/instantiate (in KABI guard), KMAP_LOCAL (+DAMON kept), sunrpc threadless-pool fallback, inet_csk_prepare out-of-line, rproc_detach decl. Kept HEAD: GKI schedutil up/down variant (dropped uncompilable single-rate helper), no-busy-check, remoteproc core + adapted 2× RPROC_DELETED→deleting flag, nfsd/lockd/bpf-cgroup (dead/no-callers), fsnotify (4-part unit reverted for coherence), u_audio (UAF fix inapplicable to GKI layout). KABI reserves 1-4 intact, SUBLEVEL 270. Compile clean (builder clang): schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
+| `a1ef0f5b` | **inotify half-merge fix** — restored GKI `inotify_update_existing_watch` (270 had taken 1/4 of upstream `27d172b60eec`, breaking the full build); §1.2 corrected to srctree-only sync after stale `work/` shadows caused a bogus selinux `context.h` failure; see §14 |
+| `8ddce89a` | **inet_csk link fix** — upstream `5d5389b2c37c`'s `this_cpu_inc(*orphan_count)` cannot link on 5.10 (`struct percpu_counter *`, fallback symbol undefined); restored `percpu_counter_inc`, kept upstream TCP cb-flags clear |
+| `795a0e5b160f` | **Bypass charging** (xaga-only, `mediatek/` path): `mtk_charger.c:2165/2173` `input_suspend` pattern cloned to `bypass_charging` (`bypass_charging_get/set`, `USB_PROP_BYPASS_CHARGING`, `usb_sysfs_field_tbl` RW, `charger_check_status:2534` gate, `bypass_charging_set_flag` forces `enable_powerpath(true)` + `power_supply_changed` + `_wake_up_charger`); `mtk_charger.h:330/430/635/738` struct+enum+externs; CP managers `pd_cp_manager:832/qc_cp_manager:388/pd_single_cp_manager:660` gated via `bypass_charging_get_flag()` → `SM_HOLD`; compile-tested `mtk_charger.o`/`pd_cp_manager.o` on xaga `mediatek/` (`plato/` untouched, selected via `Makefile:102 BUILD_PRODUCT_NAME`); default OFF, userspace toggle `/sys/class/power_supply/usb/bypass_charging` for future Infinix-X build |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -538,8 +548,8 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | Thermal poller busy-rearm with no temp source (upstream Linux4) | Poll re-armed forever with neither temp source configured | `088c0f23` | fixed in tree |
 | ZRAM writeback wear (UFS health) | Writeback writes cold pages to flash | `5a64ca47` (removed) | fixed |
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
-| Camera open → instant reboot/panic (first seen after `ed9ed6f3`, 2026-09-13) | Upstream `c3bf5129` backport made `v4l2_ctrl_request_complete()` kzalloc+bind a handler for every control-less request — runs per preview frame in vb2 hot path on a vendor 5.10.269 tree whose `media_request` core predates it (XagaForge hit the same panic at `7b4c52fd`) | `d8634229` (revert v4l2 core to no-op, keep AIE `CHECK_SERVICE_0` guards) | fixed in tree, NEEDS on-device camera validation |
-| Full build break after 270 merge (2026-09-14, `Image modules` link stage): (a) `inotify_user.o` undefined `INOTIFY_MARK_FLAGS` + implicit `inotify_arg_to_flags` — the merge took 1 of 4 parts of upstream `27d172b60eec`; (b) bogus `security/selinux/ss/services.c:56 'context.h' not found` — a stale `work/` shadow copy of services.c without its sibling (repo was fine; O= builds prefer `work/` copies, see §1.2); (c) vmlinux link `ld.lld: undefined __bad_size_call_parameter` from `inet_csk_prepare_for_destroy_sock` — upstream `5d5389b2c37c` uses `this_cpu_inc(*orphan_count)` but on 5.10 orphan_count is `struct percpu_counter *` (this_cpu only does 1/2/4/8-byte scalars; fallback symbol is extern-but-never-defined) | (a) half-merged upstream unit; (b) verification sync copied 686 merge files into `work/`; (c) broken upstream backport line | `2bb2bf58` (restore GKI inotify) + deleted all 686 `work/` shadows + `3cfc8da6` (`percpu_counter_inc`, keeps upstream cb-flags clear) | fixed in tree, user to rebuild |
+| Camera open → instant reboot/panic (first seen after `ed9ed6f3`, 2026-09-13) | Upstream `c3bf5129` backport made `v4l2_ctrl_request_complete()` kzalloc+bind a handler for every control-less request — runs per preview frame in vb2 hot path on a vendor 5.10.269 tree whose `media_request` core predates it (XagaForge hit the same panic at `7b4c52fd`) | `cde9d859` (revert v4l2 core to no-op, keep AIE `CHECK_SERVICE_0` guards) | fixed in tree, NEEDS on-device camera validation |
+| Full build break after 270 merge (2026-09-14, `Image modules` link stage): (a) `inotify_user.o` undefined `INOTIFY_MARK_FLAGS` + implicit `inotify_arg_to_flags` — the merge took 1 of 4 parts of upstream `27d172b60eec`; (b) bogus `security/selinux/ss/services.c:56 'context.h' not found` — a stale `work/` shadow copy of services.c without its sibling (repo was fine; O= builds prefer `work/` copies, see §1.2); (c) vmlinux link `ld.lld: undefined __bad_size_call_parameter` from `inet_csk_prepare_for_destroy_sock` — upstream `5d5389b2c37c` uses `this_cpu_inc(*orphan_count)` but on 5.10 orphan_count is `struct percpu_counter *` (this_cpu only does 1/2/4/8-byte scalars; fallback symbol is extern-but-never-defined) | (a) half-merged upstream unit; (b) verification sync copied 686 merge files into `work/`; (c) broken upstream backport line | `a1ef0f5b` (restore GKI inotify) + deleted all 686 `work/` shadows + `8ddce89a` (`percpu_counter_inc`, keeps upstream cb-flags clear) | fixed in tree, user to rebuild |
 
 **Last known 100% crash-free baseline: 0.2 (dd3b1030, 5.10.266).** 0.3 Beta 2 (25176a53)
 fixes all known regressions but has less cumulative on-device hours than 0.2.
@@ -586,7 +596,7 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (HEAD `870efaea`).** 5.10.270, ESK v2.2,
+**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (17.0 HEAD, includes `870efaea` + `cde9d859`).** 5.10.270, ESK v2.2,
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
 fixes from XagaForge — on `17.0` (cherry-picked to `16.2-rebase`). The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
@@ -609,9 +619,9 @@ via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
   builder LXC patch adds `USER_NS`/`PID_NS` at build time for Droidspaces.
 
 ### Roadmap (priority order)
-1. **On-device validation of HEAD** (`d8634229`) on A17 ROM — user builds
+1. **On-device validation of 17.0 HEAD** on A17 ROM — user builds
    KSU-SUSFS-LXC variant, runs §6 checklist + gaming session. Verify:
-   **camera opens with zero reboots** (regression test for §14 `d8634229`),
+   **camera opens with zero reboots** (regression test for §14 `cde9d859`),
    `gaming_mode` + `prime_gaming_floor_pct` (default **64**) on policy7,
    CPU7 no longer oscillating 300↔2850, freq trace sane under throttle
    (`fceil/max_seen` path), media (AIE) no crash, GPU IPA sane
