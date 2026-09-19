@@ -2205,12 +2205,19 @@ int bypass_charging_set_flag(int val)
 
 	bypass = !!val;
 	if (pinfo) {
+		if (bypass && !pinfo->bypass_charging)
+			pinfo->bypass_saved_thermal_fcc =
+				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit;
 		pinfo->bypass_charging = bypass;
 		if (pinfo->chg1_dev) {
 			if (bypass) {
 				charger_dev_enable_powerpath(pinfo->chg1_dev, true);
 				charger_dev_enable(pinfo->chg1_dev, true);
+				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
 				charger_dev_set_charging_current(pinfo->chg1_dev, 0);
+			} else if (pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit == 0) {
+				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit =
+					pinfo->bypass_saved_thermal_fcc;
 			}
 		}
 		power_supply_changed(pinfo->psy1);
@@ -2588,12 +2595,15 @@ stop_charging:
 	charger_dev_is_enabled(info->chg1_dev, &chg_dev_chgen);
 
 	if (info->bypass_charging) {
-		/* Bypass: keep buck on, battery idle (0mA). Keep CHG_EN on but FCC 0
-		 * so VSYS stays on VBUS. Gate is also in pd/qc managers (SM_HOLD). */
+		/* Bypass: force FCC 0 through the normal path every loop.
+		 * do_algorithm programs ICHG 0 with CHG_EN kept on (the
+		 * FCC==0 auto-disable in mtk_basic_charger is skipped while
+		 * bypass is set). Buck stays on: VSYS from VBUS, batt ~0mA.
+		 * Fast-charge pumps are held in pd/qc managers (SM_HOLD). */
 		if (!chg_dev_chgen)
 			_mtk_enable_charging(info, true);
 		charger_dev_enable_powerpath(info->chg1_dev, true);
-		charger_dev_set_charging_current(info->chg1_dev, 0);
+		info->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
 		info->can_charging = true;
 		return;
 	}
@@ -4452,12 +4462,19 @@ static int bypass_charging_set(struct mtk_charger *gm,
 
 	bypass = !!val;
 	if (gm) {
+		if (bypass && !gm->bypass_charging)
+			gm->bypass_saved_thermal_fcc =
+				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit;
 		gm->bypass_charging = bypass;
 		if (gm->chg1_dev) {
 			if (bypass) {
 				charger_dev_enable_powerpath(gm->chg1_dev, true);
 				charger_dev_enable(gm->chg1_dev, true);
+				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
 				charger_dev_set_charging_current(gm->chg1_dev, 0);
+			} else if (gm->chg_data[CHG1_SETTING].thermal_charging_current_limit == 0) {
+				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit =
+					gm->bypass_saved_thermal_fcc;
 			}
 		}
 		power_supply_changed(gm->psy1);
