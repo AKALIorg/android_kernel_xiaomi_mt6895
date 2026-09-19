@@ -2205,21 +2205,9 @@ int bypass_charging_set_flag(int val)
 
 	bypass = !!val;
 	if (pinfo) {
-		if (bypass && !pinfo->bypass_charging)
-			pinfo->bypass_saved_thermal_fcc =
-				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit;
 		pinfo->bypass_charging = bypass;
-		if (pinfo->chg1_dev) {
-			if (bypass) {
-				charger_dev_enable_powerpath(pinfo->chg1_dev, true);
-				charger_dev_enable(pinfo->chg1_dev, true);
-				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
-				charger_dev_set_charging_current(pinfo->chg1_dev, 0);
-			} else if (pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit == 0) {
-				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit =
-					pinfo->bypass_saved_thermal_fcc;
-			}
-		}
+		if (bypass && pinfo->chg1_dev)
+			charger_dev_enable_powerpath(pinfo->chg1_dev, true);
 		power_supply_changed(pinfo->psy1);
 		_wake_up_charger(pinfo);
 	}
@@ -2228,6 +2216,13 @@ int bypass_charging_set_flag(int val)
 	return 0;
 }
 EXPORT_SYMBOL(bypass_charging_set_flag);
+int cmd_discharging_get_flag(void)
+{
+	if (pinfo == NULL)
+		return 0;
+	return pinfo->cmd_discharging;
+}
+EXPORT_SYMBOL(cmd_discharging_get_flag);
 static ssize_t sc_ibat_limit_store(
 	struct device *dev, struct device_attribute *attr,
 					 const char *buf, size_t size)
@@ -2577,6 +2572,8 @@ static void charger_check_status(struct mtk_charger *info)
 
 	if (info->cmd_discharging)
 		charging = false;
+	if (info->bypass_charging)
+		charging = false;
 	if (info->safety_timeout)
 		charging = false;
 	if (info->vbusov_stat)
@@ -2593,20 +2590,6 @@ stop_charging:
 	}
 
 	charger_dev_is_enabled(info->chg1_dev, &chg_dev_chgen);
-
-	if (info->bypass_charging) {
-		/* Bypass: force FCC 0 through the normal path every loop.
-		 * do_algorithm programs ICHG 0 with CHG_EN kept on (the
-		 * FCC==0 auto-disable in mtk_basic_charger is skipped while
-		 * bypass is set). Buck stays on: VSYS from VBUS, batt ~0mA.
-		 * Fast-charge pumps are held in pd/qc managers (SM_HOLD). */
-		if (!chg_dev_chgen)
-			_mtk_enable_charging(info, true);
-		charger_dev_enable_powerpath(info->chg1_dev, true);
-		info->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
-		info->can_charging = true;
-		return;
-	}
 
 	if (charging != info->can_charging)
 		_mtk_enable_charging(info, charging);
@@ -4462,21 +4445,9 @@ static int bypass_charging_set(struct mtk_charger *gm,
 
 	bypass = !!val;
 	if (gm) {
-		if (bypass && !gm->bypass_charging)
-			gm->bypass_saved_thermal_fcc =
-				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit;
 		gm->bypass_charging = bypass;
-		if (gm->chg1_dev) {
-			if (bypass) {
-				charger_dev_enable_powerpath(gm->chg1_dev, true);
-				charger_dev_enable(gm->chg1_dev, true);
-				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
-				charger_dev_set_charging_current(gm->chg1_dev, 0);
-			} else if (gm->chg_data[CHG1_SETTING].thermal_charging_current_limit == 0) {
-				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit =
-					gm->bypass_saved_thermal_fcc;
-			}
-		}
+		if (bypass && gm->chg1_dev)
+			charger_dev_enable_powerpath(gm->chg1_dev, true);
 		power_supply_changed(gm->psy1);
 		_wake_up_charger(gm);
 	}

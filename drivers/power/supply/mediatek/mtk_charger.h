@@ -429,7 +429,6 @@ struct mtk_charger {
 	bool typec_otg_burn_status;
 	bool input_suspend;
 	bool bypass_charging;
-	int bypass_saved_thermal_fcc;
 	bool pd_verifying;
 	bool fg_full;
 	bool charge_full;
@@ -741,6 +740,7 @@ extern int input_suspend_set_flag(int val);
 extern int input_suspend_get_flag(void);
 extern int bypass_charging_set_flag(int val);
 extern int bypass_charging_get_flag(void);
+extern int cmd_discharging_get_flag(void);
 extern void update_quick_chg_type(struct mtk_charger *info);
 extern void smart_batt_set_diff_fv(int val);
 extern void update_connect_temp(struct mtk_charger *info);

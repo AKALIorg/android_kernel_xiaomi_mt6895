@@ -387,7 +387,7 @@ static int qcm_check_condition(struct qcm_chip *chip)
 		return QCM_SM_HOLD;
 	else if (chip->input_suspend || chip->typec_burn)
 		return QCM_SM_HOLD;
-	else if (bypass_charging_get_flag())
+	else if (bypass_charging_get_flag() || cmd_discharging_get_flag())
 		return QCM_SM_HOLD;
 	else if (!is_between(MIN_JEITA_CHG_INDEX, MAX_JEITA_CHG_INDEX, chip->jeita_chg_index))
 		return QCM_SM_HOLD;
