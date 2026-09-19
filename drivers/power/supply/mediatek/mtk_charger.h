@@ -428,6 +428,7 @@ struct mtk_charger {
 	bool typec_otg_burn;
 	bool typec_otg_burn_status;
 	bool input_suspend;
+	bool bypass_charging;
 	bool pd_verifying;
 	bool fg_full;
 	bool charge_full;
@@ -661,6 +662,7 @@ enum usb_property {
 	USB_PROP_BATTCONT_ONLINE,
 	USB_PROP_THERMAL_REMOVE,
 	USB_PROP_WARM_TERM,
+	USB_PROP_BYPASS_CHARGING,
 };
 
 struct mtk_usb_sysfs_field_info {
@@ -736,6 +738,8 @@ extern int get_soft_reset_status(void);
 
 extern int input_suspend_set_flag(int val);
 extern int input_suspend_get_flag(void);
+extern int bypass_charging_set_flag(int val);
+extern int bypass_charging_get_flag(void);
 extern void update_quick_chg_type(struct mtk_charger *info);
 extern void smart_batt_set_diff_fv(int val);
 extern void update_connect_temp(struct mtk_charger *info);
