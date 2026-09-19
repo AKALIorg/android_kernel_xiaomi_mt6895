@@ -2206,8 +2206,13 @@ int bypass_charging_set_flag(int val)
 	bypass = !!val;
 	if (pinfo) {
 		pinfo->bypass_charging = bypass;
-		if (bypass && pinfo->chg1_dev)
-			charger_dev_enable_powerpath(pinfo->chg1_dev, true);
+		if (pinfo->chg1_dev) {
+			if (bypass) {
+				charger_dev_enable_powerpath(pinfo->chg1_dev, true);
+				charger_dev_enable(pinfo->chg1_dev, true);
+				charger_dev_set_charging_current(pinfo->chg1_dev, 0);
+			}
+		}
 		power_supply_changed(pinfo->psy1);
 		_wake_up_charger(pinfo);
 	}
@@ -2571,8 +2576,6 @@ static void charger_check_status(struct mtk_charger *info)
 		charging = false;
 	if (info->sc.disable_charger == true)
 		charging = false;
-	if (info->bypass_charging)
-		charging = false;
 stop_charging:
 	mtk_battery_notify_check(info);
 
@@ -2583,6 +2586,17 @@ stop_charging:
 	}
 
 	charger_dev_is_enabled(info->chg1_dev, &chg_dev_chgen);
+
+	if (info->bypass_charging) {
+		/* Bypass: keep buck on, battery idle (0mA). Keep CHG_EN on but FCC 0
+		 * so VSYS stays on VBUS. Gate is also in pd/qc managers (SM_HOLD). */
+		if (!chg_dev_chgen)
+			_mtk_enable_charging(info, true);
+		charger_dev_enable_powerpath(info->chg1_dev, true);
+		charger_dev_set_charging_current(info->chg1_dev, 0);
+		info->can_charging = true;
+		return;
+	}
 
 	if (charging != info->can_charging)
 		_mtk_enable_charging(info, charging);
@@ -4439,8 +4453,13 @@ static int bypass_charging_set(struct mtk_charger *gm,
 	bypass = !!val;
 	if (gm) {
 		gm->bypass_charging = bypass;
-		if (bypass && gm->chg1_dev)
-			charger_dev_enable_powerpath(gm->chg1_dev, true);
+		if (gm->chg1_dev) {
+			if (bypass) {
+				charger_dev_enable_powerpath(gm->chg1_dev, true);
+				charger_dev_enable(gm->chg1_dev, true);
+				charger_dev_set_charging_current(gm->chg1_dev, 0);
+			}
+		}
 		power_supply_changed(gm->psy1);
 		_wake_up_charger(gm);
 	}
