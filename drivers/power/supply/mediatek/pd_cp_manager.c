@@ -832,8 +832,9 @@ static int pdm_check_condition(struct usbpd_pm *pdpm)
 	} else if (pdpm->input_suspend || pdpm->typec_burn) {
 		pdm_err("PDM_SM_HOLD input_suspend=%d,typec_burn=%d\n", pdpm->input_suspend, pdpm->typec_burn);
 		return PDM_SM_HOLD;
-	} else if (bypass_charging_get_flag()) {
-		pdm_err("PDM_SM_HOLD bypass_charging\n");
+	} else if (bypass_charging_get_flag() || cmd_discharging_get_flag()) {
+		pdm_err("PDM_SM_HOLD bypass_charging=%d cmd_discharging=%d\n",
+			bypass_charging_get_flag(), cmd_discharging_get_flag());
 		return PDM_SM_HOLD;
 	} else if (!is_between(MIN_JEITA_CHG_INDEX, MAX_JEITA_CHG_INDEX, pdpm->jeita_chg_index)) {
 		pdm_err("PDM_SM_HOLD for jeita jeita_chg_index=%d\n", pdpm->jeita_chg_index);
