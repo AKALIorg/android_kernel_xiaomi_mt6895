@@ -640,9 +640,10 @@ static int do_algorithm(struct mtk_charger *info)
 
 	if (bypass_charging_get_flag() || cmd_discharging_get_flag())
 		charger_dev_enable(info->chg1_dev, false);
-	else 	if ((pdata->input_current_limit == 0 ||
-	     pdata->charging_current_limit == 0) &&
-	    !bypass_charging_get_flag() && !cmd_discharging_get_flag())
+	else 	if (bypass_charging_get_flag() || cmd_discharging_get_flag())
+		charger_dev_enable(info->chg1_dev, false);
+	else if (pdata->input_current_limit == 0 ||
+	    pdata->charging_current_limit == 0)
 		charger_dev_enable(info->chg1_dev, false);
 	else {
 		alg = get_chg_alg_by_name("pe5");

@@ -429,6 +429,9 @@ struct mtk_charger {
 	bool typec_otg_burn_status;
 	bool input_suspend;
 	bool bypass_charging;
+	bool bypass_has_saved;
+	int bypass_saved_thermal_fcc;
+	int bypass_saved_thermal_aicr;
 	bool pd_verifying;
 	bool fg_full;
 	bool charge_full;
