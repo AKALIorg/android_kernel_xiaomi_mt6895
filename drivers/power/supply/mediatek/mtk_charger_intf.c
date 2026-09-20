@@ -332,6 +332,22 @@ int get_charger_type(struct mtk_charger *info)
 		    (prop2.intval == POWER_SUPPLY_TYPE_USB &&
 		    prop3.intval == POWER_SUPPLY_USB_TYPE_UNKNOWN))
 			prop2.intval = POWER_SUPPLY_TYPE_UNKNOWN;
+
+		/* PD contract overrides BC12 CDP/DCP: report true type */
+		if (prop2.intval != POWER_SUPPLY_TYPE_UNKNOWN &&
+		    prop.intval == 1 &&
+		    info->pd_verify_done &&
+		    (info->pd_type == MTK_PD_CONNECT_PE_READY_SNK ||
+		     info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_PD30 ||
+		     info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_APDO)) {
+			prop2.intval = POWER_SUPPLY_TYPE_USB_PD;
+			/* keep cached chr_type and the exposed usb power_supply
+			 * type in sync so /sys/class/power_supply/usb/type
+			 * shows USB_PD instead of the stale BC12 CDP */
+			info->chr_type = POWER_SUPPLY_TYPE_USB_PD;
+			if (info->usb_psy)
+				info->usb_desc.type = POWER_SUPPLY_TYPE_USB_PD;
+		}
 	}
 
 	chr_debug("%s online:%d type:%d usb_type:%d\n", __func__,
