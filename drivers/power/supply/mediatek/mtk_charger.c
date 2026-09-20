@@ -2572,8 +2572,16 @@ static void charger_check_status(struct mtk_charger *info)
 
 	if (info->cmd_discharging)
 		charging = false;
-	if (info->bypass_charging)
-		charging = false;
+	if (info->bypass_charging || info->cmd_discharging) {
+		charger_dev_is_enabled(info->chg1_dev, &chg_dev_chgen);
+		if (!chg_dev_chgen)
+			_mtk_enable_charging(info, true);
+		charger_dev_enable_powerpath(info->chg1_dev, true);
+		info->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
+		info->chg_data[CHG1_SETTING].thermal_input_current_limit = -1;
+		info->can_charging = true;
+		return;
+	}
 	if (info->safety_timeout)
 		charging = false;
 	if (info->vbusov_stat)
