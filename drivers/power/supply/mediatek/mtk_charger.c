@@ -2208,6 +2208,15 @@ int bypass_charging_set_flag(int val)
 		pinfo->bypass_charging = bypass;
 		if (bypass && pinfo->chg1_dev)
 			charger_dev_enable_powerpath(pinfo->chg1_dev, true);
+		if (!bypass && pinfo->bypass_has_saved) {
+			if (pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit == 0)
+				pinfo->chg_data[CHG1_SETTING].thermal_charging_current_limit =
+					pinfo->bypass_saved_thermal_fcc;
+			if (pinfo->chg_data[CHG1_SETTING].thermal_input_current_limit == -1)
+				pinfo->chg_data[CHG1_SETTING].thermal_input_current_limit =
+					pinfo->bypass_saved_thermal_aicr;
+			pinfo->bypass_has_saved = false;
+		}
 		power_supply_changed(pinfo->psy1);
 		_wake_up_charger(pinfo);
 	}
@@ -2573,12 +2582,32 @@ static void charger_check_status(struct mtk_charger *info)
 	if (info->cmd_discharging)
 		charging = false;
 	if (info->bypass_charging || info->cmd_discharging) {
-		charger_dev_is_enabled(info->chg1_dev, &chg_dev_chgen);
-		if (!chg_dev_chgen)
-			_mtk_enable_charging(info, true);
-		charger_dev_enable_powerpath(info->chg1_dev, true);
-		info->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
-		info->chg_data[CHG1_SETTING].thermal_input_current_limit = -1;
+		/* Bypass: battery idle, buck powers VSYS.
+		 * CHG_EN is forced off in do_algorithm (641 gate); here
+		 * keep can_charging true so AICR is recomputed live
+		 * (plug-out leaves a 100mA residue, MIVR adapts) while
+		 * FCC stays clamped 0 (stops PE/HV algos). Pumps are
+		 * held in pd/qc managers. Thermal limits are saved
+		 * and re-clamped if userspace rewrites them mid-bypass;
+		 * setters restore on disable. */
+		mtk_battery_notify_check(info);
+		if (charging && uisoc < 80 && info->batpro_done == true) {
+			info->setting.vbat_mon_en = true;
+			info->batpro_done = false;
+			info->stop_6pin_re_en = false;
+		}
+		if (info->chg_data[CHG1_SETTING].thermal_charging_current_limit != 0) {
+			info->bypass_saved_thermal_fcc =
+				info->chg_data[CHG1_SETTING].thermal_charging_current_limit;
+			info->chg_data[CHG1_SETTING].thermal_charging_current_limit = 0;
+			info->bypass_has_saved = true;
+		}
+		if (info->chg_data[CHG1_SETTING].thermal_input_current_limit != -1) {
+			info->bypass_saved_thermal_aicr =
+				info->chg_data[CHG1_SETTING].thermal_input_current_limit;
+			info->chg_data[CHG1_SETTING].thermal_input_current_limit = -1;
+			info->bypass_has_saved = true;
+		}
 		info->can_charging = true;
 		return;
 	}
@@ -4456,6 +4485,15 @@ static int bypass_charging_set(struct mtk_charger *gm,
 		gm->bypass_charging = bypass;
 		if (bypass && gm->chg1_dev)
 			charger_dev_enable_powerpath(gm->chg1_dev, true);
+		if (!bypass && gm->bypass_has_saved) {
+			if (gm->chg_data[CHG1_SETTING].thermal_charging_current_limit == 0)
+				gm->chg_data[CHG1_SETTING].thermal_charging_current_limit =
+					gm->bypass_saved_thermal_fcc;
+			if (gm->chg_data[CHG1_SETTING].thermal_input_current_limit == -1)
+				gm->chg_data[CHG1_SETTING].thermal_input_current_limit =
+					gm->bypass_saved_thermal_aicr;
+			gm->bypass_has_saved = false;
+		}
 		power_supply_changed(gm->psy1);
 		_wake_up_charger(gm);
 	}
