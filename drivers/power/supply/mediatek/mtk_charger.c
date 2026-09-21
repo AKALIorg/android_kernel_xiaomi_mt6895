@@ -3151,6 +3151,8 @@ int notify_adapter_event(struct notifier_block *notifier,
 			pinfo->real_type = XMUSB350_TYPE_UNKNOW;
 		else
 			charger_dev_update_chgtype(pinfo->usb350_dev, XMUSB350_TYPE_UNKNOW);
+		if (pinfo->usb_psy)
+			pinfo->usb_desc.type = get_charger_type(pinfo);
 		power_supply_changed(pinfo->usb_psy);
 		charger_dev_cp_reset_check(pinfo->cp_master);
 		charger_dev_cp_reset_check(pinfo->cp_slave);
@@ -3177,6 +3179,8 @@ int notify_adapter_event(struct notifier_block *notifier,
 			pinfo->real_type = XMUSB350_TYPE_PD;
 		else
 			charger_dev_update_chgtype(pinfo->usb350_dev, XMUSB350_TYPE_PD);
+		if (pinfo->usb_psy)
+			pinfo->usb_desc.type = get_charger_type(pinfo);
 		power_supply_changed(pinfo->usb_psy);
 		/* PD is ready */
 		break;
@@ -3190,6 +3194,8 @@ int notify_adapter_event(struct notifier_block *notifier,
 			pinfo->real_type = XMUSB350_TYPE_PD;
 		else
 			charger_dev_update_chgtype(pinfo->usb350_dev, XMUSB350_TYPE_PD);
+		if (pinfo->usb_psy)
+			pinfo->usb_desc.type = get_charger_type(pinfo);
 		power_supply_changed(pinfo->usb_psy);
 		/* PD30 is ready */
 		break;
@@ -3204,6 +3210,8 @@ int notify_adapter_event(struct notifier_block *notifier,
 		else
 			charger_dev_update_chgtype(pinfo->usb350_dev, XMUSB350_TYPE_PD);
 		msleep(300);
+		if (pinfo->usb_psy)
+			pinfo->usb_desc.type = get_charger_type(pinfo);
 		power_supply_changed(pinfo->usb_psy);
 		/* PE40 is ready */
 		_wake_up_charger(pinfo);
