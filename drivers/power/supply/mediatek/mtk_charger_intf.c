@@ -333,10 +333,12 @@ int get_charger_type(struct mtk_charger *info)
 		    prop3.intval == POWER_SUPPLY_USB_TYPE_UNKNOWN))
 			prop2.intval = POWER_SUPPLY_TYPE_UNKNOWN;
 
-		/* PD contract overrides BC12 CDP/DCP: report true type */
+		/* PD contract overrides BC12 CDP/DCP: report true type.
+		 * Gate on the contract itself (pd_type), not on the
+		 * Xiaomi auth flag which userspace writes later - the
+		 * port IS PD from READY on. */
 		if (prop2.intval != POWER_SUPPLY_TYPE_UNKNOWN &&
 		    prop.intval == 1 &&
-		    info->pd_verify_done &&
 		    (info->pd_type == MTK_PD_CONNECT_PE_READY_SNK ||
 		     info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_PD30 ||
 		     info->pd_type == MTK_PD_CONNECT_PE_READY_SNK_APDO)) {
