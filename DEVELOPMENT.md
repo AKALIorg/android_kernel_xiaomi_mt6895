@@ -450,7 +450,7 @@ Commit message format (Android Common Kernel rules):
 | 0.1 | 0.1 | 5.10.266 (dd3b1030/f8e3dbe2 era) | First public; VNL/KSU-SUSFS/KSU-SUSFS-LXC |
 | 0.2 | 0.2 | 5.10.268 (03e2cd2b) | 5.10.267/268 merges, huge_memory fix |
 | 0.3 Beta 1 | 0.3 (renamed) | 5.10.268→269 era | **WITHDRAWN** — freezes (ESK deadlocks, later binder+le9uo) |
-| **0.3 Beta 2 (current)** | 0.3 | `25176a53e9b8` | All crash fixes; schedutil default; ESK opt-in; prerelease |
+| **0.3 (current, stable)** | 0.3 | `e4428edd3ad6` | 5.10.270, all crash fixes, ESK v2.2 opt-in, bypass charging; KSU-SUSFS-LXC + modules live, VNL/KSU-SUSFS pending |
 | 0.3.1/0.4 (planned) | — | — | Vorpal v2.2 port + ESK default + fps/battery tuning |
 
 ---
