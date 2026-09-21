@@ -4613,8 +4613,14 @@ static int pd_verify_done_set(struct mtk_charger *gm,
 {
 	if (gm) {
 		gm->pd_verify_done = !!val;
-		//if (gm->pd_verify_done)
-		//	 power_supply_changed(gm->usb_psy);
+		/* upstream left the refresh commented out: without it the
+		 * cached usb_desc.type never updates after verify, so
+		 * /sys/class/power_supply/usb/type stays on the BC12
+		 * result (CDP/DCP) forever. Re-evaluate + notify. */
+		if (gm->usb_psy) {
+			gm->usb_desc.type = get_charger_type(gm);
+			power_supply_changed(gm->usb_psy);
+		}
 	}
 	chr_err("%s %d\n", __func__, gm->pd_verify_done);
 	return 0;
