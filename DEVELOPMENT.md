@@ -604,7 +604,9 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 stable (`e4428edd`) + 5.10.271 (UNPUSHED: `16.2-rebase` `a0a4da23`+`e455e426`, `17.0` `7590bfa5`).** 5.10.271, ESK v2.2,
+**State: 0.3 stable (`e4428edd`) + 5.10.271 (PUSHED + verified Oct 2026: `16.2-rebase` `60f2f637`, `17.0` `2989dbe0`).** 5.10.271, ESK v2.2,
+- **Branch-divergence decision (Oct 2026, user-confirmed): `157418db` (PAN) + `15e0e52d` (mtk-mml) stay `17.0`-ONLY**, not mirrored to `16.2-rebase` (A17-flavored; `16.2-rebase` serves 16.x ROMs). Do NOT "fix" this divergence with a branch merge.
+- **Upstream watch: `ESK-Project/android_kernel_xiaomi_mt6895:main` (Oct 3 2026)** carries a scheduler modernization we do NOT have: BORE 6.8.0 + 6.12-era EEVDF (delayed dequeue, run-to-parity, slice protection, lag placement, O(1) fastpath) on a 5.10.269 base. It does NOT have our ESK governor / NoMount / BBRplus. Port = dedicated project (fair.c rewrite zone), not a merge.
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
 fixes from XagaForge — on both branches. The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
