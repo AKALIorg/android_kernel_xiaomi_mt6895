@@ -4,13 +4,13 @@
 kernel source repository to any AI model or developer, and they can continue development
 without any prior session knowledge.
 
-- **Repo (kernel):** https://github.com/AKALIorg/android_kernel_xiaomi_mt6895
+- **Repo (kernel):** https://github.com/ENGRahsepar/android_kernel_xiaomi_mt6895
 - **Branch:** `17.0` (Android 17 baseline; `16.2-rebase` remains for 16.x ROMs)
 - **Push policy: every functional change AND every stable merge lands on BOTH
   `17.0` and `16.2-rebase`** (merge direction: `16.2-rebase` → `17.0`, then
   push both + verify each with `git log --oneline origin/<branch> -1`).
-- **Repo (releases):** https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases
-- **Maintainer / owner:** AKALIorg (alirahsepar199@gmail.com), GitHub user `AKALIorg`
+- **Repo (releases):** https://github.com/ENGRahsepar/ESK-Kernel-Reborn-Releases
+- **Maintainer / owner:** ENGRahsepar (alirahsepar199@gmail.com), GitHub user `ENGRahsepar` (renamed from `AKALIorg`, Oct 2026; old URLs redirect)
 - **Device:** Xiaomi POCO X4 GT (`xaga`), 8GB RAM — Dimensity **8100** (MT6895Z):
   4×Cortex-A78 @ 2.85GHz (CPU4-6 = Big cluster, CPU7 = **Prime, separate DVFS domain**)
   + 4×Cortex-A55 @ 2.0GHz (CPU0-3 = Little). DTS: `capacity-dmips-mhz` = 380 (little) /
@@ -19,7 +19,7 @@ without any prior session knowledge.
   ROM support target: Android 16/17 custom ROMs (A17 boot verified Sep 2026 on
    `Angxddeep/android_kernel_xiaomi_mt6895:seventeen` @ 5.10.264 — our 5.10.270
    is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
-- **Current stable sublevel:** **5.10.270** (tracked; check kernel.org for newer).
+- **Current stable sublevel:** **5.10.271** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
   `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 on both
   branches; the `17.0` V17.0 bump was reverted in `0edb2f37`).
@@ -163,6 +163,8 @@ Base: `dd3b1030` = 5.10.266 vendor tree. Current HEAD sequence (all pushed to `1
 | — | **A17 boot verified** via `Angxddeep/...:seventeen` @ 5.10.264 booting A17 on xaga — our 5.10.270 superset therefore A17-ready (no extra patch needed; see §16.1) |
 | `d5843e1f` | **Bypass charging** (xaga, `mediatek/mtk_charger.c`): `bypass_charging` flag in `struct mtk_charger` + `USB_PROP_BYPASS_CHARGING` sysfs (`/sys/class/power_supply/usb/bypass_charging` RW 0/1, default 0, off at boot) + `cmd_discharging_get_flag()` export; `charger_check_status()` forces `charging=false` on either flag; `pd_cp_manager`/`pd_single_cp_manager`/`qc_cp_manager` SM_HOLD on either (covers SimpleBypassChargerMTK `current_cmd 0 1` path — pumps ran 9V/~4A straight through module bypass before this). On-device verified (CODM + 67W): BMS 0mA, VBUS 4.9V/650–940mA in, cap frozen. `plato/` untouched |
 | `861ef240` | **Bypass v4 + PD type fix** (xaga): (a) `mtk_basic_charger.c:641` now gates FCC==0 CHG-off on `bypass_charging`/`cmd_discharging` so `do_algorithm` and `charger_check_status` agree — fixes 7000mA↔0 oscillation; (b) `mtk_charger_intf.c:get_charger_type()` now overrides BC12 CDP to `USB_PD` when `pd_verify_done` + `PE_READY_SNK*`, syncs `chr_type`/`usb_desc.type` so `/sys/class/power_supply/usb/type` reports `USB_PD` (was stale CDP while `pd_authentication=1`) |
+| `a0a4da23` | **5.10.271 stable merge** (from `16.2-rebase`; 582 files, 589 upstream commits, 1 conflict: `net/xfrm/xfrm_user.c` kept GKI variant — discarded MTIMER_THRESH + SETDEFAULT/GETDEFAULT helpers, kept extack hardening + `xfrm_net_nlsk`; 3 files deleted upstream: sun8i-ce/ss-prng, asoc-ux500-msp.h) |
+| `e455e426` | **271 build fix**: `xfrm_net_nlsk()` `sk` → `__maybe_unused` (lockdep condition compiles out without PROVE_LOCKING → clang 22 `-Werror=unused-variable`); helper kept (7 auto-merged call sites) |
 
 ### 2.1 Known-in-tree-but-inert features
 - **NoMount**: dentry-op hooks only attach to dentries with registered rules; zero rules
@@ -291,7 +293,7 @@ Add "variants coming soon" note when partial variants upload. Verify EVERY uploa
 `unzip -p zip Image.zst | zstd -d | strings | grep "Linux version"` — a stale zip was
 almost shipped once; also verify the commit hash inside matches the intended build.
 
-User workflow: user builds variants locally, drops zips in `/home/akali/ESK_Reborn/<ver>_AKALIorg/`
+User workflow: user builds variants locally, drops zips in `/home/akali/ESK_Reborn/<ver>_ENGRahsepar/`
 folders, asks for upload. **ALWAYS verify zip's Image version string matches the intended
 commit BEFORE uploading.**
 
@@ -443,6 +445,8 @@ Commit message format (Android Common Kernel rules):
 | `d5843e1f` | **Bypass charging final** (xaga `mediatek/` only): history `470eaf2d` (v1 flag+sysfs+pump gates) → `1b01738` (v2 one-shot FCC, failed: do_algorithm overwrote → +843mA) → `bc1775f` (v3 persistent FCC clamp, REVERTED: MT6375 F_CC floors at 300mA in silicon `val_toreg`, trickle not idle) → `d5843e1` (v1 semantics + pumps gated on `bypass_charging` AND `cmd_discharging` via new export; `mtk_basic_charger:641` untouched). Root causes found on-device: (a) 67W pumps bypassed module `0 1` (PDM TUNE, 9V/~4A); (b) v1-on-CDP drain was power budget (575mA in vs gaming load), not a bug; (c) "slow charge" report was PC-USB source (CDP, no PD) — 67W gives 8.6V/3A+. Verified: `bypass_charging=1` and `current_cmd 0 1` both → BMS 0mA, `PDM_SM_HOLD`, VBUS ~4.9V. Compile: mtk_charger.o/mtk_basic_charger.o/pd_cp_manager.o |
 | `861ef240` | **Bypass v4 + PD type fix** (xaga): (a) `mtk_basic_charger.c:641` now gates `FCC==0` CHG-off on `bypass_charging`/`cmd_discharging` so `do_algorithm` and `charger_check_status` agree — fixes `7000mA↔0` oscillation; (b) `mtk_charger_intf.c:get_charger_type()` overrides BC12 `CDP` to `USB_PD` when `pd_verify_done` + `PE_READY_SNK*`, syncs `chr_type`/`usb_desc.type` so `usb/type` reports `USB_PD` (was stale `CDP` while `pd_authentication=1`) |
 | `ff8863c1` | **Bypass final design** (xaga, pre-build deep audit of `c79cc77`): loop forced CHG on + ICHG 0, but silicon floors F_CC at 300mA → trickle; nothing restored thermals on disable → FCC stuck 0. Final: CHG forced OFF in `do_algorithm` 641-gate (both flags, steady, no flap); `can_charging=true` so AICR recomputes live (plug-out leaves 100mA residue `plug_out:2802`); FCC clamp 0 stops PE/HV (`basic:531/580`); PDM HOLD leaves 5V/3A (no starvation); thermal FCC/AICR saved + re-clamped mid-bypass, restored on disable (`bypass_has_saved`); notify/vbat_mon preserved in-branch; plug-out clears `charge_full` (self-heals 100% edge). Compile: 4 objects clean |
+| `a0a4da23` | **5.10.271 stable merge** (from `16.2-rebase`, merged into `17.0` as `7590bfa5`): 582 files / 589 upstream commits, 1 conflict (`net/xfrm/xfrm_user.c` — kept GKI variant, see §2). Upstream highlights: cpufreq `zalloc_cpumask` + rwsem init order, xfrm verify extack strings + `xfrm_net_nlsk` helper, Bluetooth L2CAP/RFCOMM + NFC llcp hardening. Compile clean (builder clang): xfrm_user, cpufreq, schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
+| `e455e426` | **271 build fix** (`net/xfrm/xfrm_user.c`): `xfrm_net_nlsk()` `sk` → `__maybe_unused` — carried into `17.0` by `7590bfa5` (single merge; earlier two-merge layout superseded by sign-off rewrite) |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -458,9 +462,9 @@ Commit message format (Android Common Kernel rules):
 ## 11. UPSTREAM LINKS (complete reference list)
 
 ### Kernel sources
-- Kernel source repo: https://github.com/AKALIorg/android_kernel_xiaomi_mt6895 (branch 16.2-rebase)
-- Releases repo: https://github.com/AKALIorg/ESK-Kernel-Reborn-Releases (branch main)
-- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.270 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
+- Kernel source repo: https://github.com/ENGRahsepar/android_kernel_xiaomi_mt6895 (branch 16.2-rebase)
+- Releases repo: https://github.com/ENGRahsepar/ESK-Kernel-Reborn-Releases (branch main)
+- kernel.org stable: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git (tag v5.10.271 = current base; `git ls-remote ... "refs/tags/v5.10.*" | sort -V` to check newest)
 - AOSP common: https://android.googlesource.com/kernel/common (branch android12-5.10 / android12-5.10-lts)
 - Builder reference (closed, on user PC): `~/esk_builder/` (see §1.1)
 
@@ -553,6 +557,7 @@ kernel.hung_task_timeout_secs           = 10 during debugging (default 120)
 | le9uo originally shipped active | Ratios too aggressive for 8GB gaming | `25176a53` (0/0/0) | fixed |
 | Camera open → instant reboot/panic (first seen after `ed9ed6f3`, 2026-09-13) | Upstream `c3bf5129` backport made `v4l2_ctrl_request_complete()` kzalloc+bind a handler for every control-less request — runs per preview frame in vb2 hot path on a vendor 5.10.269 tree whose `media_request` core predates it (XagaForge hit the same panic at `7b4c52fd`) | `cde9d859` (revert v4l2 core to no-op, keep AIE `CHECK_SERVICE_0` guards) | fixed in tree, NEEDS on-device camera validation |
 | Full build break after 270 merge (2026-09-14, `Image modules` link stage): (a) `inotify_user.o` undefined `INOTIFY_MARK_FLAGS` + implicit `inotify_arg_to_flags` — the merge took 1 of 4 parts of upstream `27d172b60eec`; (b) bogus `security/selinux/ss/services.c:56 'context.h' not found` — a stale `work/` shadow copy of services.c without its sibling (repo was fine; O= builds prefer `work/` copies, see §1.2); (c) vmlinux link `ld.lld: undefined __bad_size_call_parameter` from `inet_csk_prepare_for_destroy_sock` — upstream `5d5389b2c37c` uses `this_cpu_inc(*orphan_count)` but on 5.10 orphan_count is `struct percpu_counter *` (this_cpu only does 1/2/4/8-byte scalars; fallback symbol is extern-but-never-defined) | (a) half-merged upstream unit; (b) verification sync copied 686 merge files into `work/`; (c) broken upstream backport line | `a1ef0f5b` (restore GKI inotify) + deleted all 686 `work/` shadows + `8ddce89a` (`percpu_counter_inc`, keeps upstream cb-flags clear) | fixed in tree, user to rebuild |
+| `xfrm_user.o` compile break after 271 merge (2026-10-07, object stage): `net/xfrm/xfrm_user.c:40 unused variable 'sk'` under clang 22 `-Werror` — new upstream `xfrm_net_nlsk()` helper's `sk` is only consumed by the `rcu_dereference_protected` lockdep condition, compiled out without PROVE_LOCKING | New upstream helper vs GKI config (helper itself kept: 7 auto-merged call sites) | `e455e426` (`sk` → `__maybe_unused`) | fixed in tree, compile-verified |
 
 **Last known 100% crash-free baseline: 0.2 (dd3b1030, 5.10.266).** 0.3 Beta 2 (25176a53)
 fixes all known regressions but has less cumulative on-device hours than 0.2.
@@ -599,12 +604,13 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 Beta 2 + v2.2 + stable fixes + camera fix + 5.10.270 (17.0 HEAD, includes `870efaea` + `cde9d859`).** 5.10.270, ESK v2.2,
+**State: 0.3 stable (`e4428edd`) + 5.10.271 (UNPUSHED: `16.2-rebase` `a0a4da23`+`e455e426`, `17.0` `7590bfa5`).** 5.10.271, ESK v2.2,
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
-fixes from XagaForge — on `17.0` (cherry-picked to `16.2-rebase`). The XagaForge
+fixes from XagaForge — on both branches. The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
 A17 boot on xaga verified
 via `Angxddeep/...:seventeen` @ 5.10.264 (our tree is superset, see §16.1).
+GitHub owner renamed `AKALIorg` → `ENGRahsepar` (Oct 2026; remotes/docs updated, history NOT rewritten).
 
 ### 16.1 Android 17 readiness (checked Sep 2026)
 
