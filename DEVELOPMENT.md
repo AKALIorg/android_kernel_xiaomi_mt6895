@@ -447,6 +447,9 @@ Commit message format (Android Common Kernel rules):
 | `ff8863c1` | **Bypass final design** (xaga, pre-build deep audit of `c79cc77`): loop forced CHG on + ICHG 0, but silicon floors F_CC at 300mA → trickle; nothing restored thermals on disable → FCC stuck 0. Final: CHG forced OFF in `do_algorithm` 641-gate (both flags, steady, no flap); `can_charging=true` so AICR recomputes live (plug-out leaves 100mA residue `plug_out:2802`); FCC clamp 0 stops PE/HV (`basic:531/580`); PDM HOLD leaves 5V/3A (no starvation); thermal FCC/AICR saved + re-clamped mid-bypass, restored on disable (`bypass_has_saved`); notify/vbat_mon preserved in-branch; plug-out clears `charge_full` (self-heals 100% edge). Compile: 4 objects clean |
 | `a0a4da23` | **5.10.271 stable merge** (from `16.2-rebase`, merged into `17.0` as `7590bfa5`): 582 files / 589 upstream commits, 1 conflict (`net/xfrm/xfrm_user.c` — kept GKI variant, see §2). Upstream highlights: cpufreq `zalloc_cpumask` + rwsem init order, xfrm verify extack strings + `xfrm_net_nlsk` helper, Bluetooth L2CAP/RFCOMM + NFC llcp hardening. Compile clean (builder clang): xfrm_user, cpufreq, schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
 | `e455e426` | **271 build fix** (`net/xfrm/xfrm_user.c`): `xfrm_net_nlsk()` `sk` → `__maybe_unused` — carried into `17.0` by `7590bfa5` (single merge; earlier two-merge layout superseded by sign-off rewrite) |
+| `157418db` | **xaga: ARM64_SW_TTBR0_PAN** in `vendor/xaga.config` (A17 VINTF FCM level 7 requirement). Pushed by user direct to `17.0` (17.0-only, NOT on `16.2-rebase`) |
+| `15e0e52d` | **mtk-mml video playback + in-kernel scaling fix** (Angaddeep Singh, via `angx` upstream): `-EBUSY` fallback to initial config on `dup_task`; new `mtk-mml-rsz-fw.c/h` (in-kernel resizer firmware calc, ported from Nothing MT6886 5.15). Pushed by user direct to `17.0` (17.0-only). Mml objects compile-verified (builder clang) |
+| `2989dbe0` | **Merge origin/17.0 into 17.0** — takes the 2 commits above on top of 271 merge `7590bfa5`; clean auto-merge. Both branches pushed + verified Oct 2026 |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -604,7 +607,7 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 stable (`e4428edd`) + 5.10.271 (UNPUSHED: `16.2-rebase` `a0a4da23`+`e455e426`, `17.0` `7590bfa5`).** 5.10.271, ESK v2.2,
+**State: 0.3 stable (`e4428edd`) + 5.10.271 (PUSHED + verified Oct 2026: `16.2-rebase` `60f2f637`, `17.0` `2989dbe0`).** 5.10.271, ESK v2.2,
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
 fixes from XagaForge — on both branches. The XagaForge
 v4l2 `request_complete` backport is REVERTED (camera-open panic, see §14);
