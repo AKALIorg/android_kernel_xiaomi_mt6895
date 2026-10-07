@@ -175,7 +175,10 @@ void nf_ct_l3proto_module_put(unsigned short l3proto);
 
 static inline bool nf_ct_shared(const struct nf_conn *ct)
 {
-	return refcount_read(&ct->ct_general.use) > 1;
+	/* GKI 5.10: struct nf_conntrack::use is atomic_t (upstream stable
+	 * converted it to refcount_t, but this tree kept the GKI variant —
+	 * same class of divergence as the 270 inet_csk and 271 xfrm merges) */
+	return atomic_read(&ct->ct_general.use) > 1;
 }
 
 /* load module; enable/disable conntrack in this namespace */
