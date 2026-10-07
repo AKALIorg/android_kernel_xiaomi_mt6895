@@ -21,9 +21,9 @@ without any prior session knowledge.
    is a strict superset; binderfs/ashmem present, LXC USER_NS via builder).
 - **Current stable sublevel:** **5.10.271** (tracked; check kernel.org for newer).
 - **Localversion convention:** `CONFIG_LOCALVERSION="-ESK-Reborn_V0.X"` in
-  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3 on both
-  branches; the `17.0` V17.0 bump was reverted in `0edb2f37`).
-  `uname -r` shows `5.10.270-android12-...-ESK-Reborn_V0.3/<git-sha12>`.
+  `arch/arm64/configs/vendor/xaga.config` — **bump per release** (V0.3.1 on both
+  branches since Oct 2026 (was V0.3); the `17.0` V17.0 bump was reverted in `0edb2f37`).
+  `uname -r` shows `5.10.271-android12-...-ESK-Reborn_V0.3.1/<git-sha12>`.
 
 ---
 
@@ -605,7 +605,7 @@ fixes all known regressions but has less cumulative on-device hours than 0.2.
 
 ## 16. CURRENT PROJECT STATUS & ROADMAP (as of this document)
 
-**State: 0.3 stable (`e4428edd`) + 5.10.271 (PUSHED + verified Oct 2026: `16.2-rebase` `60f2f637`, `17.0` `2989dbe0`).** 5.10.271, ESK v2.2,
+**State: 0.3.1 (5.10.271, V0.3.1 localversion; PUSHED + verified Oct 2026 on both branches — tips: `git log --oneline origin/16.2-rebase -1` / `origin/17.0 -1`).** ESK v2.2,
 - **Branch-divergence decision (Oct 2026, user-confirmed): `157418db` (PAN) + `15e0e52d` (mtk-mml) stay `17.0`-ONLY**, not mirrored to `16.2-rebase` (A17-flavored; `16.2-rebase` serves 16.x ROMs). Do NOT "fix" this divergence with a branch merge.
 - **Upstream watch: `ESK-Project/android_kernel_xiaomi_mt6895:main` (Oct 3 2026)** carries a scheduler modernization we do NOT have: BORE 6.8.0 + 6.12-era EEVDF (delayed dequeue, run-to-parity, slice protection, lag placement, O(1) fastpath) on a 5.10.269 base. It does NOT have our ESK governor / NoMount / BBRplus. Port = dedicated project (fair.c rewrite zone), not a merge.
 Templar stable fixes (EEVDF rescale, BORE weight, yield), le9uo/mali
