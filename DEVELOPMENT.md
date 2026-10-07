@@ -48,7 +48,7 @@ without any prior session knowledge.
      uses ANDROID_KABI_RESERVE(6/7/8) in `include/linux/sched.h`; ESK's BORE uses reserves 1-4,
      no conflict)
   3. `stock_config.patch` (only for stock builds)
-  4. KernelSU variants: clones `ReSukiSU/ReSukiSU` (branch main), enables `CONFIG_KSU`
+  4. KernelSU variants: clones `Baka-SU/BakaSU` (branch main; renamed from ReSukiSU Oct 2026 — same `drivers/kernelsu` + `CONFIG_KSU`/`CONFIG_KSU_SUSFS` interface), enables `CONFIG_KSU`
   5. Variants: VNL (vanilla), KSU-SUSFS, KSU-SUSFS-LXC (LXC flag applies lxc_support.patch)
 - **Toolchain:** Android clang (currently r596125-based, "clang 22.0.2") at `~/esk_builder/clang/`.
   Build flags: `LLVM=1 LLVM_IAS=1`, `ARCH=arm64`, out-dir = `~/esk_builder/work`,
@@ -325,7 +325,7 @@ Commit message format (Android Common Kernel rules):
   devfreq** — two controllers fight. GPU errors (`gpufreq_fix_target_oppidx fail`) come
   from userspace writing debug procfs; GPUEB rejects under thermal guard. Harmless-ish.
 - MT6895 CPU freq = `mediatek,cpufreq-hw` with `fast_switch_possible=true` (3 domains).
-- Phone used on OmniROM(A16-style) w/ ReSukiSU+SUSFS; Roblox = the repro game.
+- Phone used on OmniROM(A16-style) w/ BakaSU (renamed from ReSukiSU Oct 2026)+SUSFS; Roblox = the repro game.
 
 ---
 
@@ -447,6 +447,7 @@ Commit message format (Android Common Kernel rules):
 | `ff8863c1` | **Bypass final design** (xaga, pre-build deep audit of `c79cc77`): loop forced CHG on + ICHG 0, but silicon floors F_CC at 300mA → trickle; nothing restored thermals on disable → FCC stuck 0. Final: CHG forced OFF in `do_algorithm` 641-gate (both flags, steady, no flap); `can_charging=true` so AICR recomputes live (plug-out leaves 100mA residue `plug_out:2802`); FCC clamp 0 stops PE/HV (`basic:531/580`); PDM HOLD leaves 5V/3A (no starvation); thermal FCC/AICR saved + re-clamped mid-bypass, restored on disable (`bypass_has_saved`); notify/vbat_mon preserved in-branch; plug-out clears `charge_full` (self-heals 100% edge). Compile: 4 objects clean |
 | `a0a4da23` | **5.10.271 stable merge** (from `16.2-rebase`, merged into `17.0` as `7590bfa5`): 582 files / 589 upstream commits, 1 conflict (`net/xfrm/xfrm_user.c` — kept GKI variant, see §2). Upstream highlights: cpufreq `zalloc_cpumask` + rwsem init order, xfrm verify extack strings + `xfrm_net_nlsk` helper, Bluetooth L2CAP/RFCOMM + NFC llcp hardening. Compile clean (builder clang): xfrm_user, cpufreq, schedutil, esk, fair, memcontrol, vmscan, platform, xhci-ring, irqdomain, inet_connection_sock, v4l2-ctrls, remoteproc_core, cgroup, bbr, bbrplus |
 | `e455e426` | **271 build fix** (`net/xfrm/xfrm_user.c`): `xfrm_net_nlsk()` `sk` → `__maybe_unused` — carried into `17.0` by `7590bfa5` (single merge; earlier two-merge layout superseded by sign-off rewrite) |
+| — | **Builder: KernelSU source `ReSukiSU/ReSukiSU` → `Baka-SU/BakaSU`** (upstream rename Oct 2026; same `kernel/setup.sh <ref>` interface, same `drivers/kernelsu` symlink + `CONFIG_KSU`/`CONFIG_KSU_SUSFS` symbols, SUSFS menu intact — builder flow unchanged; `build/setup.sh` + builder README updated, §1.1/§11 synced). Next KSU-variant build exercises it live |
 
 ### Release history
 | Release | Tag | Build commit | Notes |
@@ -478,7 +479,7 @@ Commit message format (Android Common Kernel rules):
 - BBRplus 5.10: https://github.com/UJX6N/bbrplus-5.10 (convert_official_linux-5.10.x_src_to_bbrplus.patch)
 - google/bbr: https://github.com/google/bbr (v3 branch; in-tree bbr is already v3)
 - SuSFS: https://gitlab.com/simonpunk/susfs4ksu (branch gki-android12-5.10; builder pulls it)
-- ReSukiSU: https://github.com/ReSukiSU/ReSukiSU (builder installs on KSU variants)
+- BakaSU (renamed from ReSukiSU Oct 2026): https://github.com/Baka-SU/BakaSU (builder installs on KSU variants; old `ReSukiSU/ReSukiSU` URL redirects)
 - KernelSU (base): https://github.com/tiann/KernelSU
 - AIK/AnyKernel3: https://github.com/osm0sis/AnyKernel3 (builder's AK3 template)
 - Linux upstream EAS/EEVDF reference: EEVDF merged in v6.6 (`5f50b5a2` series by Peter Zijlstra)
